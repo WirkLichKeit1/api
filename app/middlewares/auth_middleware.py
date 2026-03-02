@@ -14,14 +14,17 @@ def auth_required(role=None, require_org=True):
                 return jsonify({"error": "Missing token"}), 401
 
             token = auth_header.split(" ")[1]
+            print("token recebido:", token)
             try:
                 payload = decode_token(token)
+                print("payload:", payload)
             except pyjwt.ExpiredSignatureError:
                 return jsonify({"error": "Token expired"}), 401
-            except pyjwt.InvalidTokenError:
+            except pyjwt.InvalidTokenError as e:
+                print("token inv:", e)
                 return jsonify({"error": "Invalid token"}), 401
                 
-            user = User.query.get(payload["sub"])
+            user = User.query.get(int(payload["sub"]))
                
             if not user:
                     return jsonify({"error": "User not found"}), 401

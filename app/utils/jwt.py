@@ -4,7 +4,7 @@ from flask import current_app
 
 def generate_access_token(user_id: int):
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "exp": datetime.utcnow() + timedelta(hours=1),
         "iat": datetime.utcnow()
     }
@@ -14,6 +14,9 @@ def generate_access_token(user_id: int):
         current_app.config["SECRET_KEY"],
         algorithm="HS256"
     )
+
+    if isinstance(token, bytes):
+        return token.decode("utf-8")
     return token
 
 def decode_token(token: str):
