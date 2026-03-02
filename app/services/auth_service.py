@@ -15,8 +15,7 @@ class AuthService:
         user = User(
             name=data["name"],
             email=data["email"],
-            password_hash=hash_password(data["password"]),
-            organization_id=data["organization_id"]
+            password_hash=hash_password(data["password"])
         )
         
         return repo.save(user)

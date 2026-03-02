@@ -1,8 +1,8 @@
-"""fix models
+"""update system logic
 
-Revision ID: 2154eb1bfd13
+Revision ID: 0b1bde28fe10
 Revises: 
-Create Date: 2026-03-01 22:13:18.850367
+Create Date: 2026-03-02 19:45:17.369036
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '2154eb1bfd13'
+revision = '0b1bde28fe10'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -40,7 +40,7 @@ def upgrade():
     sa.Column('email', sa.String(length=120), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=False),
     sa.Column('role', sa.String(length=50), nullable=True),
-    sa.Column('organization_id', sa.Integer(), nullable=False),
+    sa.Column('organization_id', sa.Integer(), nullable=True),
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),

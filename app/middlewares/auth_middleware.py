@@ -3,7 +3,7 @@ from flask import request, jsonify, g
 from app.utils.jwt import decode_token
 from app.models.user import User
 
-def auth_required(role=None):
+def auth_required(role=None, require_org=True):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -22,6 +22,9 @@ def auth_required(role=None):
                 
                 if role and user.role != role:
                     return jsonify({"error": "Forbidden"}), 403
+
+                if require_org and not user.organization_id:
+                    return jsonify({"error": "You must belong to an organization"}), 403
                 
                 g.current_user = user
             

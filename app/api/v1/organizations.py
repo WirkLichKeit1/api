@@ -11,7 +11,7 @@ from app.schemas.organization_schema import (
 org_bp = Blueprint("organizations", __name__)
 
 @org_bp.post("/organizations")
-@auth_required(role="admin")
+@auth_required(require_org=False)
 def create_organization():
     try:
         data = OrganizationCreateSchema(**request.json)
@@ -21,6 +21,18 @@ def create_organization():
         return jsonify({"error": e.errors()}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+@org_bp.post("/organizations/<int:id>/join")
+@auth_required(require_org=False)
+def join_organization(id):
+    try:
+        if g.current_user.organization_id:
+            return jsonify({"error": "You already belong to an organization"}), 400
+        
+        org = OrganizationService.join(id, g.current_user)
+        return jsonify(OrganizationResponseSchema.model_validate(org).model_dump())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
 
 @org_bp.get("/organizations/<int:id>")
 @auth_required()
