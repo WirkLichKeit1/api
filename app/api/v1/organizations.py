@@ -15,7 +15,7 @@ org_bp = Blueprint("organizations", __name__)
 def create_organization():
     try:
         data = OrganizationCreateSchema(**request.json)
-        org = OrganizationService.create(data.model_dump())
+        org = OrganizationService.create(data.model_dump(), g.current_user)
         return jsonify(OrganizationResponseSchema.model_validate(org).model_dump()), 201
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
