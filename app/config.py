@@ -10,6 +10,11 @@ class BaseConfig:
     SECRET_KEY = os.getenv("SECRET_KEY")
     API_PREFIX = "/api/v1"
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not cls.SECRET_KEY:
+            raise RuntimeError("SECRET_KEY não definida")
+
 class DevelopmentConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'dev.db')}"
     DEBUG = True
