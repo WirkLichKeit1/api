@@ -3,4 +3,5 @@ Flask-SQLAlchemy
 Flask-Migrate
 pymysql
 python-dotenv
-pydantic
+pydantic[email]
+PyJWT

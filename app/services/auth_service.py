@@ -1,12 +1,14 @@
 from app.models.user import User
-from app.extensions import db
 from app.utils.security import hash_password, verify_password
 from app.utils.jwt import generate_access_token
+from app.repositories.user_repository import UserRepository
+
+repo = UserRepository()
 
 class AuthService:
     @staticmethod
     def register(data):
-        existing = User.query.filter_by(email=data["email"]).first()
+        existing = repo.get_by_email(data["email"])
         if existing:
             raise ValueError("Email already registered")
 
@@ -16,14 +18,12 @@ class AuthService:
             password_hash=hash_password(data["password"]),
             organization_id=data["organization_id"]
         )
-        db.session.add(user)
-        db.session.commit()
         
-        return user
+        return repo.save(user)
 
     @staticmethod
     def login(data):
-        user = User.query.filter_by(email=data["email"]).first()
+        user = repo.get_by_email(data["email"])
         if not user or not verify_password(user.password_hash, data["password"]):
             raise ValueError("Invalid credentials")
 
