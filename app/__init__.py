@@ -1,6 +1,3 @@
-import pymysql
-pymysql.install_as_MySQLdb()
-
 from flask import Flask
 from .config import config_by_name
 from .extensions import db, migrate
@@ -12,7 +9,7 @@ import os
 def create_app():
     env = os.getenv("FLASK_ENV", "dev")
 
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder="../templates")
     app.config.from_object(config_by_name[env])
 
     # Extensions

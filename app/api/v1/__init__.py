@@ -5,6 +5,7 @@ from .organizations import org_bp
 from .projects import projects_bp
 from .tasks import tasks_bp
 from .comments import comments_bp
+from .frontend import front_bp
 
 def register_v1_routes(app, prefix):
     api_v1 = Blueprint("api_v1", __name__, url_prefix=prefix)
@@ -17,3 +18,4 @@ def register_v1_routes(app, prefix):
     api_v1.register_blueprint(comments_bp)
 
     app.register_blueprint(api_v1)
+    app.register_blueprint(front_bp)
