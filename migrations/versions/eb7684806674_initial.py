@@ -1,8 +1,8 @@
-"""update system logic
+"""initial
 
-Revision ID: 0b1bde28fe10
+Revision ID: eb7684806674
 Revises: 
-Create Date: 2026-03-02 19:45:17.369036
+Create Date: 2026-03-06 18:49:29.141911
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '0b1bde28fe10'
+revision = 'eb7684806674'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -26,6 +26,17 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
+    op.create_table('token_blacklist',
+    sa.Column('jti', sa.String(length=36), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('token_blacklist', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_token_blacklist_jti'), ['jti'], unique=True)
+
     op.create_table('projects',
     sa.Column('name', sa.String(length=120), nullable=False),
     sa.Column('organization_id', sa.Integer(), nullable=False),
@@ -89,5 +100,9 @@ def downgrade():
 
     op.drop_table('users')
     op.drop_table('projects')
+    with op.batch_alter_table('token_blacklist', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_token_blacklist_jti'))
+
+    op.drop_table('token_blacklist')
     op.drop_table('organizations')
     # ### end Alembic commands ###
