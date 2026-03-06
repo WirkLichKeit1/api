@@ -1,8 +1,9 @@
+import jwt as pyjwt
 from functools import wraps
 from flask import request, jsonify, g
 from app.utils.jwt import decode_token
 from app.models.user import User
-import jwt as pyjwt
+from app.services.token_service import TokenService
 
 def auth_required(role=None, require_org=True):
     def decorator(fn):
@@ -19,9 +20,15 @@ def auth_required(role=None, require_org=True):
                 print("payload:", payload)
             except pyjwt.ExpiredSignatureError:
                 return jsonify({"error": "Token expired"}), 401
-            except pyjwt.InvalidTokenError as e:
+            except pyjwt.InvalidTokenError:
                 return jsonify({"error": "Invalid token"}), 401
-                
+
+            if payload.get("type") != "access":
+                return jsonify({"error": "Invalid token type"}), 401
+
+            if TokenService.is_blacklisted(payload["jti"]):
+                return jsonify({"error": "Token revoked"}), 401
+            
             user = User.query.get(int(payload["sub"]))
                
             if not user:

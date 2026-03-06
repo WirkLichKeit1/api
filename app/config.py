@@ -19,11 +19,17 @@ class DevelopmentConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'dev.db')}"
     DEBUG = True
 
+class TestingCondig(BaseConfig):
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    TESTING = True
+    DEBUG = False
+
 class ProductionConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     DEBUG = False
 
 config_by_name = {
     "dev": DevelopmentConfig,
+    "test": TestingCondig,
     "prod": ProductionConfig,
 }

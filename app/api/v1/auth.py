@@ -29,3 +29,27 @@ def login():
         return jsonify({"error": e.errors()}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+@auth_bp.post("/refresh")
+def refresh():
+    try:
+        data = request.json
+        if not data or "refresh_token" not in data:
+            return jsonify({"error": "refresh_token is required"}), 400
+        
+        result = AuthService.refresh(data["refresh_token"])
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+
+@auth_bp.post("/logout")
+def logout():
+    try:
+        data = request.json
+        if not data or "refresh_token" not in data:
+            return jsonify({"error": "refresh_token is required"}), 400
+            
+        AuthService.logout(data["refresh_token"])
+        return jsonify({"message": "Logged out successfully"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400

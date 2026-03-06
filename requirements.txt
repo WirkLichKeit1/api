@@ -5,3 +5,5 @@ pymysql
 python-dotenv
 pydantic[email]
 PyJWT
+pytest
+pytest-flask

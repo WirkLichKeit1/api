@@ -1,11 +1,17 @@
 import jwt
+import uuid
 from datetime import datetime, timedelta
 from flask import current_app
 
-def generate_access_token(user_id: int):
+def _build_token(user_id: int, token_type: str, expires_in: timedelta) -> tuple[str, str, datetime]:
+    jti = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + expires_in
+
     payload = {
         "sub": str(user_id),
-        "exp": datetime.utcnow() + timedelta(hours=1),
+        "jti": jti,
+        "type": token_type,
+        "exp": expires_at,
         "iat": datetime.utcnow()
     }
 
@@ -16,10 +22,17 @@ def generate_access_token(user_id: int):
     )
 
     if isinstance(token, bytes):
-        return token.decode("utf-8")
-    return token
+        token = token.decode("utf-8")
+    
+    return token, jti, expires_at
 
-def decode_token(token: str):
+def generate_access_token(user_id: int) -> tuple[str, str, datetime]:
+    return _build_token(user_id, "access", timedelta(minutes=15))
+
+def generate_refresh_token(user_id: int) -> tuple[str, str, datetime]:
+    return _build_token(user_id, "refresh", timedelta(days=7))
+
+def decode_token(token: str) -> dict:
     return jwt.decode(
         token,
         current_app.config["SECRET_KEY"],
