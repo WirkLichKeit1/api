@@ -14,12 +14,19 @@ class OrganizationService:
             raise ValueError("Organization name already taken")
 
         org = Organization(name=data["name"])
-        org_repo.save(org)
+        org_repo.flush(org)
 
         user.organization_id = org.id
         user.role = "admin"
-        user_repo.save(user)
+        org_repo.save_all(org, user)
 
+        return org
+
+    @staticmethod
+    def join(id: int, user: User) -> Organization:
+        org = OrganizationService.get_one(id)
+        user.organization_id = org.id
+        user_repo.save(user)
         return org
 
     @staticmethod
@@ -45,12 +52,3 @@ class OrganizationService:
     def delete(id: int) -> None:
         org = OrganizationService.get_one(id)
         org_repo.delete(org)
-
-    @staticmethod
-    def join(id: int, user: User) -> Organization:
-        org = OrganizationService.get_one(id)
-
-        user.organization_id = org.id
-        user_repo.save(user)
-        
-        return org

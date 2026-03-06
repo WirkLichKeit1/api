@@ -2,6 +2,7 @@ import jwt as pyjwt
 from functools import wraps
 from flask import request, jsonify, g
 from app.utils.jwt import decode_token
+from app.extensions import db
 from app.models.user import User
 from app.services.token_service import TokenService
 
@@ -29,7 +30,7 @@ def auth_required(role=None, require_org=True):
             if TokenService.is_blacklisted(payload["jti"]):
                 return jsonify({"error": "Token revoked"}), 401
             
-            user = User.query.get(int(payload["sub"]))
+            user = db.session.get(User, int(payload["sub"]))
                
             if not user:
                     return jsonify({"error": "User not found"}), 401
