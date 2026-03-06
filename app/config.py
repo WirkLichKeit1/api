@@ -16,7 +16,10 @@ class BaseConfig:
             raise RuntimeError("SECRET_KEY não definida")
 
 class DevelopmentConfig(BaseConfig):
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'dev.db')}"
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        f"sqlite:///{os.path.join(BASE_DIR, 'dev.db')}"
+    )
     DEBUG = True
 
 class TestingCondig(BaseConfig):
