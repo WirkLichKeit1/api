@@ -1968,8 +1968,12 @@ async function submitAuth() {
       const data = await apiNoAuth('POST', '/login', { email, password });
       state.accessToken = data.access_token;
       state.refreshToken = data.refresh_token;
+      state.name = data.user.name;
+      state.role = data.user.role;
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
+      localStorage.setItem('user_name', data.user.name);
+      localStorage.setItem('user_role', data.user.role);
       await initApp();
     }
   } catch (e) {
@@ -2015,11 +2019,13 @@ async function loadApp() {
   await loadDashboard();
 
   // mock user info from token
+  user_name = localStorage.getItem('user_name');
+  user_role = localStorage.getItem('user_role');
   const payload = parseJwt(state.accessToken);
   if (payload) {
     document.getElementById('user-avatar').textContent = 'U';
-    document.getElementById('user-name-display').textContent = payload.name + payload.sub;
-    document.getElementById('user-role-display').textContent = payload.role;
+    document.getElementById('user-name-display').textContent = user_name + payload.sub;
+    document.getElementById('user-role-display').textContent = user_role;
   }
 }
 
