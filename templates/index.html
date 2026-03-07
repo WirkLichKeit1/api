@@ -1953,6 +1953,9 @@ async function submitAuth() {
       const data = await apiNoAuth('POST', '/login', { email, password });
       state.accessToken = data.access_token;
       state.refreshToken = data.refresh_token;
+      state.user = data.user;
+
+      localStorage.setItem('user', JSON.stringify(data.user));
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
       await initApp();
