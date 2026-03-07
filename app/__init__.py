@@ -1,4 +1,6 @@
-from flask import Flask
+from flask_openapi3.openapi import OpenAPI
+from flask_openapi3.models.info import Info
+from flask_openapi3.models.security_scheme import SecurityScheme
 from .config import config_by_name
 from .extensions import db, migrate
 from .core.logger import setup_logger
@@ -9,7 +11,15 @@ import os
 def create_app():
     env = os.getenv("FLASK_ENV")
 
-    app = Flask(__name__, template_folder="../templates")
+    info = Info(
+        title="Task Management API",
+        version="1.0.0",
+        description="API corporativa de gestão de tarefas estilo Jira/Trello"
+    )
+
+    security_schemes = {"bearerAuth": SecurityScheme(type="http", scheme="bearee")}
+    
+    app = OpenAPI(__name__, info=info, security_schemes=security_schemes, template_folder="../templates")
     app.config.from_object(config_by_name[env])
 
     # Extensions

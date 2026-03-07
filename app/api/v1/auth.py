@@ -1,55 +1,63 @@
-from flask import Blueprint, request, jsonify
+from flask import jsonify
+from flask_openapi3.blueprint import APIBlueprint
+from flask_openapi3.models.tag import Tag
 from pydantic import ValidationError
-from app.schemas.auth_schema import RegisterSchema, LoginSchema
+from app.schemas.auth_schema import (
+    RegisterSchema,
+    LoginSchema,
+    RefreshSchema,
+    LogoutSchema,
+    LoginResponseSchema,
+    RegisterResponseSchema
+)
 from app.services.auth_service import AuthService
 
-auth_bp = Blueprint("auth", __name__)
+auth_tag = Tag(name="Auth", description="Registro, Login e gerenciamento de tokens")
+auth_bp = APIBlueprint("auth", __name__, abp_tags=[auth_tag])
 
-@auth_bp.post("/register")
-def register():
+@auth_bp.post("/register",
+    summary="Registrar usuário",
+    responses={"201": RegisterResponseSchema, "400": None}
+)
+def register(body: RegisterSchema):
     try:
-        data = RegisterSchema(**request.json)
-        user = AuthService.register(data.model_dump())
+        user = AuthService.register(body.model_dump())
         return jsonify({
             "id": user.id,
             "email": user.email,
         }), 201
-    except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-@auth_bp.post("/login")
-def login():
+@auth_bp.post("/login",
+    summary="Login",
+    responses={"200": LoginResponseSchema, "400": None}
+)
+def login(body: LoginSchema):
     try:
-        data = LoginSchema(**request.json)
-        result = AuthService.login(data.model_dump())
+        result = AuthService.login(body.model_dump())
         return jsonify(result)
-    except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-@auth_bp.post("/refresh")
-def refresh():
+@auth_bp.post("/refresh",
+    summary="Renovar tokens",
+    responses={"200": LoginResponseSchema, "401": None}
+)
+def refresh(body: RefreshSchema):
     try:
-        data = request.json
-        if not data or "refresh_token" not in data:
-            return jsonify({"error": "refresh_token is required"}), 400
-        
-        result = AuthService.refresh(data["refresh_token"])
+        result = AuthService.refresh(body.refresh_token)
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
 
-@auth_bp.post("/logout")
-def logout():
+@auth_bp.post("/logout",
+    summary="Logout",
+    responses={"200": None, "400": None}
+)
+def logout(body: LogoutSchema):
     try:
-        data = request.json
-        if not data or "refresh_token" not in data:
-            return jsonify({"error": "refresh_token is required"}), 400
-            
-        AuthService.logout(data["refresh_token"])
+        AuthService.logout(body.refresh_token)
         return jsonify({"message": "Logged out successfully"})
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})

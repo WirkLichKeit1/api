@@ -1,47 +1,49 @@
-from flask import Blueprint, request, jsonify, g
-from pydantic import ValidationError
+from flask import jsonify, g
+from flask_openapi3.blueprint import APIBlueprint
+from flask_openapi3.models.tag import Tag
 from app.middlewares.auth_middleware import auth_required
 from app.services.comment_service import CommentService
 from app.schemas.comment_schema import (
     CommentCreateSchema,
     CommentResponseSchema
 )
+from app.schemas.path_schema import TaskPath, CommentPath
 
-comments_bp = Blueprint("comments", __name__)
+comments_tag = Tag(name="Comments", description="Comentários em tarefas")
+comments_bp = APIBlueprint("comments", __name__, abp_tags=[comments_tag])
 
-@comments_bp.post("/projects/<int:project_id>/tasks/<int:task_id>/comments")
+@comments_bp.post("/projects/<int:project_id>/tasks/<int:task_id>/comments",
+    summary="Criar comentário",
+    responses={"201": CommentResponseSchema, "400": None}
+)
 @auth_required()
-def create_comment(project_id, task_id):
+def create_comment(path: TaskPath, body: CommentCreateSchema):
     try:
-        data = CommentCreateSchema(**request.json)
-        comment = CommentService.create(
-            data.content,
-            task_id,
-            project_id,
-            g.current_user.id
-        )
+        comment = CommentService.create(body.content, path.task_id, path.project_id, g.current_user.id)
         return jsonify(CommentResponseSchema.model_validate(comment).model_dump()), 201
-    except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
-@comments_bp.get("/projects/<int:project_id>/tasks/<int:task_id>/comments")
+@comments_bp.get("/projects/<int:project_id>/tasks/<int:task_id>/comments",
+    summary="Listar comentários",
+    responses={"200": CommentResponseSchema, "404": None}
+)
 @auth_required()
-def get_all_comments(project_id, task_id):
+def get_all_comments(path: TaskPath):
     try:
-        comments = CommentService.get_all(task_id, project_id)
-        return jsonify([
-            CommentResponseSchema.model_validate(c).model_dump() for c in comments
-        ])
+        comments = CommentService.get_all(path.task_id, path.project_id)
+        return jsonify([CommentResponseSchema.model_validate(c).model_dump() for c in comments])
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
-@comments_bp.delete("/projects/<int:project_id>/tasks/<int:task_id>/comments/<int:id>")
+@comments_bp.delete("/projects/<int:project_id>/tasks/<int:task_id>/comments/<int:id>",
+    summary="Deletar comentário",
+    responses={"200": None, "403": None, "404": None}
+)
 @auth_required()
-def delete_comment(project_id, task_id, id):
+def delete_comment(path: CommentPath):
     try:
-        CommentService.delete(id, task_id, project_id, g.current_user.id)
+        CommentService.delete(path.id, path.task_id, path.project_id, g.current_user.id)
         return jsonify({"message": "Comment deleted"}), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403

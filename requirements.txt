@@ -1,6 +1,7 @@
 Flask
 Flask-SQLAlchemy
 Flask-Migrate
+flask-openapi3
 pymysql
 python-dotenv
 pydantic[email]
