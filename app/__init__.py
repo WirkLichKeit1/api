@@ -7,7 +7,7 @@ from .api.v1 import register_v1_routes
 import os
 
 def create_app():
-    env = os.getenv("FLASK_ENV", "dev")
+    env = os.getenv("FLASK_ENV")
 
     app = Flask(__name__, template_folder="../templates")
     app.config.from_object(config_by_name[env])
