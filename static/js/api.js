@@ -19,17 +19,20 @@ let _isRefreshing = false;
 let _refreshQueue = []; // [{resolve, reject}]
 
 function _processQueue(error, token = null) {
-  _refreshQueue.forEach(({ resolve, reject }) => {
+  // Copia o array antes de iterar para evitar problemas se ele for modificado
+  const queue = _refreshQueue.slice();
+  _refreshQueue = [];
+  queue.forEach(({ resolve, reject }) => {
     if (error) reject(error);
     else resolve(token);
   });
-  _refreshQueue = [];
 }
 
 /* ── Request interceptor: injeta token ── */
 http.interceptors.request.use(
   (config) => {
-    const token = Auth.getAccessToken();
+    // Auth é carregado após api.js — acessamos via window para garantir
+    const token = window.Auth?.getAccessToken();
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -68,7 +71,7 @@ http.interceptors.response.use(
       _isRefreshing = true;
 
       try {
-        const refreshToken = Auth.getRefreshToken();
+        const refreshToken = window.Auth?.getRefreshToken();
         if (!refreshToken) throw new Error('No refresh token');
 
         const res = await axios.post(`${API_PREFIX}/refresh`, {
@@ -76,7 +79,7 @@ http.interceptors.response.use(
         });
 
         const { access_token, refresh_token } = res.data;
-        Auth.saveTokens(access_token, refresh_token);
+        window.Auth?.saveTokens(access_token, refresh_token);
 
         http.defaults.headers['Authorization'] = `Bearer ${access_token}`;
         original.headers['Authorization']       = `Bearer ${access_token}`;
@@ -86,8 +89,8 @@ http.interceptors.response.use(
 
       } catch (refreshError) {
         _processQueue(refreshError, null);
-        Auth.clearSession();
-        App.goTo('auth');
+        window.Auth?.clearSession();
+        window.App?.goTo('auth');
         return Promise.reject(refreshError);
       } finally {
         _isRefreshing = false;

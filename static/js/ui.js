@@ -89,8 +89,13 @@ const Toast = (() => {
 ════════════════════════════════════════ */
 const Modal = (() => {
   let _overlay = null;
+  let _escHandler = null; // FIX: guarda referência para remover corretamente
 
   function _close() {
+    if (_escHandler) {
+      document.removeEventListener('keydown', _escHandler);
+      _escHandler = null;
+    }
     if (_overlay) {
       _overlay.remove();
       _overlay = null;
@@ -107,7 +112,7 @@ const Modal = (() => {
    *   onAfterOpen  {Function} callback após abrir
    */
   function open({ title, size = 'md', bodyHTML = '', footerHTML = '', onAfterOpen } = {}) {
-    _close();
+    _close(); // Fecha modal anterior e remove listener ESC pendente
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -127,22 +132,20 @@ const Modal = (() => {
       </div>
     `;
 
-    // Fix icon sizes
     overlay.querySelectorAll('[data-close] svg').forEach(s => {
       s.style.width = '16px'; s.style.height = '16px';
     });
 
-    // Close on overlay click
+    // FIX: todos os caminhos de fechar chamam _close(), que remove o listener ESC
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) _close();
     });
 
-    // Close on X
     overlay.querySelector('[data-close]').addEventListener('click', _close);
 
-    // ESC key
-    const onKey = (e) => { if (e.key === 'Escape') { _close(); document.removeEventListener('keydown', onKey); } };
-    document.addEventListener('keydown', onKey);
+    // FIX: guarda referência do handler para poder remover em qualquer caminho de fechamento
+    _escHandler = (e) => { if (e.key === 'Escape') _close(); };
+    document.addEventListener('keydown', _escHandler);
 
     document.body.appendChild(overlay);
     _overlay = overlay;
@@ -207,7 +210,6 @@ const Drawer = (() => {
     _close();
 
     const user = Auth.getUser();
-    const isMyTask = taskData.user_id === user?.id;
 
     // Overlay
     const overlay = document.createElement('div');
@@ -218,6 +220,10 @@ const Drawer = (() => {
     const drawer = document.createElement('div');
     drawer.className = 'drawer';
     drawer.setAttribute('role', 'complementary');
+
+    // FIX: guarda projectId e taskId no elemento imediatamente, antes de qualquer async
+    drawer.dataset.projectId = projectId;
+    drawer.dataset.taskId    = taskData.id;
 
     drawer.innerHTML = _buildDrawerHTML(taskData, projectId, user);
 
@@ -241,11 +247,9 @@ const Drawer = (() => {
         try {
           const updated = await TasksAPI.update(projectId, taskData.id, { status: newStatus });
           taskData.status = updated.status;
-          // Update pills UI
           drawer.querySelectorAll('.status-pill').forEach(p => {
             p.className = `status-pill${p.dataset.status === updated.status ? ` active-${updated.status}` : ''}`;
           });
-          // Update badge in header
           const statusBadge = drawer.querySelector('[data-status-badge]');
           if (statusBadge) statusBadge.outerHTML = Render.statusBadge(updated.status, true);
           Toast.success('Status atualizado');
@@ -408,7 +412,6 @@ const Drawer = (() => {
 
   function _prependComment(drawer, c, user) {
     const list = drawer.querySelector('[data-comment-list]');
-    // Remove empty state if present
     const empty = list.querySelector('.empty-state');
     if (empty) empty.remove();
     list.insertAdjacentHTML('afterbegin', _buildCommentHTML(c, user));
@@ -418,23 +421,33 @@ const Drawer = (() => {
   function _wireDeleteComment(el, c, list) {
     const btn = el.querySelector('[data-delete-comment]');
     if (!btn) return;
+
+    // FIX: captura projectId e taskId do drawer no momento do clique,
+    // não antes — o drawer pode ter fechado entre o clique e o confirm
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
+
+      // Lê os IDs do elemento do drawer no momento do clique (ainda está aberto)
+      const drawerEl = document.querySelector('.drawer');
+      const pId = drawerEl?.dataset.projectId;
+      const tId = drawerEl?.dataset.taskId;
+
       const ok = await confirmDialog({
         title: 'Excluir comentário',
         message: 'Tem certeza que deseja excluir este comentário?',
         confirmLabel: 'Excluir',
         danger: true,
       });
+
       if (!ok) return;
-      // Get projectId/taskId from drawer scope via closure
+
+      // FIX: após o confirm (async), o drawer pode ter fechado — verifica antes de chamar API
+      if (!pId || !tId) {
+        Toast.error('Drawer foi fechado antes de confirmar.');
+        return;
+      }
+
       try {
-        const projectId = btn.closest('.drawer') ? _getDrawerMeta('projectId') : null;
-        const taskId    = btn.closest('.drawer') ? _getDrawerMeta('taskId')    : null;
-        // Stored as data attr on drawer
-        const dw = document.querySelector('.drawer');
-        const pId = dw?.dataset.projectId;
-        const tId = dw?.dataset.taskId;
         await CommentsAPI.remove(pId, tId, c.id);
         el.remove();
         Toast.success('Comentário excluído');
@@ -442,11 +455,6 @@ const Drawer = (() => {
         Toast.error(apiErrorMessage(err));
       }
     });
-  }
-
-  // We store IDs on the drawer element for comment deletion
-  function _getDrawerMeta(key) {
-    return _drawer?.dataset[key] || null;
   }
 
   function setMeta(projectId, taskId) {

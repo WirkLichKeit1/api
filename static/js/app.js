@@ -1,11 +1,5 @@
 /**
  * app.js — Orquestrador principal da SPA
- *
- * Responsável por:
- *   - Inicialização e verificação de sessão
- *   - Navegação entre screens (auth / org-setup / app)
- *   - Renderização de cada view (dashboard, projects, tasks)
- *   - State global mínimo (currentProject, etc.)
  */
 
 const App = (() => {
@@ -18,10 +12,17 @@ const App = (() => {
     currentProject: null,
   };
 
+  // FIX: flag para evitar que _initAppShell registre listeners duplicados
+  // em fluxos de logout → re-login sem reload de página
+  let _shellInitialized = false;
+
   /* ══════════════════════════════════════════
      INIT
   ═══════════════════════════════════════════ */
   async function init() {
+    // FIX: _initAuth() precisa ser chamada sempre, não só quando não autenticado
+    _initAuth();
+
     if (!Auth.isAuthenticated()) {
       showScreen('auth');
       return;
@@ -35,12 +36,10 @@ const App = (() => {
       return;
     }
 
-    // Reload user info to ensure org is up to date
     try {
       const orgData = await OrgAPI.get(state.user.organization_id);
       state.org = orgData;
     } catch (e) {
-      // Org may have been deleted — force re-auth
       if (e.response?.status === 403 || e.response?.status === 404) {
         Auth.clearSession();
         showScreen('auth');
@@ -124,7 +123,6 @@ const App = (() => {
       });
     });
 
-    // Permite submeter com Enter
     [$('login-email'), $('login-password')].forEach(el => {
       el.addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-login').click(); });
     });
@@ -144,7 +142,6 @@ const App = (() => {
       await withLoading($('btn-register'), async () => {
         try {
           await Auth.register(name, email, password);
-          // Auto-login após registro
           const user = await Auth.login(email, password);
           state.user = user;
           showScreen('org-setup');
@@ -161,10 +158,10 @@ const App = (() => {
      ORG SETUP SCREEN
   ═══════════════════════════════════════════ */
   function _initOrgSetup() {
-    const btnCreate    = $('org-btn-create');
-    const btnJoin      = $('org-btn-join');
-    const panelCreate  = $('org-panel-create');
-    const panelJoin    = $('org-panel-join');
+    const btnCreate   = $('org-btn-create');
+    const btnJoin     = $('org-btn-join');
+    const panelCreate = $('org-panel-create');
+    const panelJoin   = $('org-panel-join');
 
     btnCreate.addEventListener('click', () => {
       panelCreate.classList.toggle('hidden');
@@ -180,7 +177,6 @@ const App = (() => {
       btnCreate.classList.remove('selected');
     });
 
-    // Create org
     $('org-create-submit').addEventListener('click', async () => {
       const name = $('org-create-name').value.trim();
       if (!name) { Toast.warning('Digite um nome para a organização.'); return; }
@@ -189,15 +185,7 @@ const App = (() => {
         try {
           const org = await OrgAPI.create(name);
           state.org = org;
-
-          // O backend já atualizou o role e organization_id do usuário.
-          // Como não há endpoint GET /me, patchamos localmente com os
-          // valores esperados (criador sempre vira admin).
-          state.user = Auth.patchUser({
-            organization_id: org.id,
-            role: 'admin',
-          });
-
+          state.user = Auth.patchUser({ organization_id: org.id, role: 'admin' });
           _initAppShell();
           showScreen('app');
           Router.start();
@@ -208,7 +196,6 @@ const App = (() => {
       });
     });
 
-    // Join org
     $('org-join-submit').addEventListener('click', async () => {
       const orgId = parseInt($('org-join-id').value.trim());
       if (!orgId) { Toast.warning('Digite o ID da organização.'); return; }
@@ -229,7 +216,6 @@ const App = (() => {
       });
     });
 
-    // Logout link
     const logoutLink = $('org-setup-logout');
     if (logoutLink) {
       logoutLink.addEventListener('click', async (e) => {
@@ -244,13 +230,16 @@ const App = (() => {
      APP SHELL (sidebar + topbar)
   ═══════════════════════════════════════════ */
   function _initAppShell() {
-    // User chip
+    // Sempre atualiza os dados visuais do usuário no chip
     const u = state.user;
-    $('shell-user-name').textContent  = u?.name  || 'Usuário';
-    $('shell-user-role').textContent  = u?.role  || 'member';
+    $('shell-user-name').textContent   = u?.name || 'Usuário';
+    $('shell-user-role').textContent   = u?.role || 'member';
     $('shell-user-avatar').textContent = (u?.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-    // Logout
+    // FIX: listeners registrados apenas uma vez por ciclo de vida da página
+    if (_shellInitialized) return;
+    _shellInitialized = true;
+
     $('btn-shell-logout').addEventListener('click', async () => {
       const ok = await confirmDialog({
         title: 'Sair',
@@ -259,26 +248,21 @@ const App = (() => {
       });
       if (!ok) return;
       await Auth.logout();
-      state.user = null;
-      state.org  = null;
-      state.projects = [];
+      state.user        = null;
+      state.org         = null;
+      state.projects    = [];
+      _shellInitialized = false; // permite re-inicializar após novo login
       showScreen('auth');
-      Router.navigate('dashboard');
     });
 
-    // Register routes
-    Router.on('dashboard',         () => _viewDashboard());
-    Router.on('projects',          () => _viewProjects());
-    Router.on('projects/:id',      ({ id }) => _viewTasks(parseInt(id)));
+    Router.on('dashboard',    () => _viewDashboard());
+    Router.on('projects',     () => _viewProjects());
+    Router.on('projects/:id', ({ id }) => _viewTasks(parseInt(id)));
 
-    // Nav items
     document.querySelectorAll('[data-nav]').forEach(el => {
-      el.addEventListener('click', () => {
-        Router.navigate(el.dataset.nav);
-      });
+      el.addEventListener('click', () => Router.navigate(el.dataset.nav));
     });
 
-    // Highlight active nav on hash change
     window.addEventListener('hashchange', _updateNavActive);
     _updateNavActive();
   }
@@ -287,8 +271,7 @@ const App = (() => {
     const hash = window.location.hash.replace(/^#\/?/, '');
     document.querySelectorAll('[data-nav]').forEach(el => {
       const nav = el.dataset.nav;
-      const active = hash === nav || hash.startsWith(nav + '/');
-      el.classList.toggle('active', active);
+      el.classList.toggle('active', hash === nav || hash.startsWith(nav + '/'));
     });
   }
 
@@ -317,20 +300,17 @@ const App = (() => {
     _setContent(`<div class="loading-center"><div class="spinner"></div></div>`);
 
     try {
-      const [projects] = await Promise.all([ProjectsAPI.list()]);
+      const projects = await ProjectsAPI.list();
       state.projects = projects;
 
-      // Fetch task counts from each project (first page)
-      let totalTasks = 0, totalDone = 0, totalDoing = 0, totalTodo = 0;
+      let totalTasks = 0, totalTodo = 0, totalDoing = 0, totalDone = 0;
+
       const taskPromises = projects.slice(0, 6).map(p =>
         TasksAPI.list(p.id, { per_page: 1 }).catch(() => null)
       );
       const taskResults = await Promise.all(taskPromises);
-
-      // We only get accurate totals per project from the paginated response
       taskResults.forEach(r => { if (r) totalTasks += r.total; });
 
-      // For status counts, fetch with filters
       if (projects.length) {
         const pid = projects[0].id;
         const [todo, doing, done] = await Promise.all([
@@ -478,10 +458,8 @@ const App = (() => {
 
     _setContent(html);
 
-    // New project
     $('btn-new-project')?.addEventListener('click', () => _openNewProjectModal());
 
-    // Card actions
     document.querySelectorAll('[data-open-project]').forEach(el => {
       el.addEventListener('click', () => Router.navigate(`projects/${el.dataset.openProject}`));
     });
@@ -622,10 +600,10 @@ const App = (() => {
      VIEW: TASKS (Kanban)
   ═══════════════════════════════════════════ */
   let _taskState = {
-    projectId: null,
-    project:   null,
-    filters:   { status: '', priority: '', page: 1, per_page: 20 },
-    allTasks:  [],         // flat list fetched
+    projectId:  null,
+    project:    null,
+    filters:    { status: '', priority: '', page: 1, per_page: 20 },
+    allTasks:   [],
     pagination: null,
   };
 
@@ -666,7 +644,6 @@ const App = (() => {
   async function _fetchAndRenderBoard() {
     const { projectId, filters } = _taskState;
 
-    // Fetch all statuses (up to per_page each for kanban view)
     const [todoRes, doingRes, doneRes] = await Promise.all([
       TasksAPI.list(projectId, { ...filters, status: 'todo',  page: 1, per_page: 30 }),
       TasksAPI.list(projectId, { ...filters, status: 'doing', page: 1, per_page: 30 }),
@@ -687,7 +664,7 @@ const App = (() => {
   }
 
   function _renderBoard(columns) {
-    const { projectId, project, filters } = _taskState;
+    const { filters } = _taskState;
 
     const html = `
       <div class="page">
@@ -706,7 +683,7 @@ const App = (() => {
             <option value="low"    ${filters.priority==='low'    ? 'selected' : ''}>Low</option>
           </select>
 
-          ${(filters.priority) ? `<button class="btn btn-ghost btn-sm" id="btn-clear-filters">Limpar filtros</button>` : ''}
+          ${filters.priority ? `<button class="btn btn-ghost btn-sm" id="btn-clear-filters">Limpar filtros</button>` : ''}
         </div>
 
         <div class="kanban-board">
@@ -719,10 +696,8 @@ const App = (() => {
 
     _setContent(html);
 
-    // Wire new task
     $('btn-new-task')?.addEventListener('click', () => _openNewTaskModal());
 
-    // Wire filters
     $('filter-priority')?.addEventListener('change', async (e) => {
       _taskState.filters.priority = e.target.value;
       await _fetchAndRenderBoard();
@@ -733,14 +708,13 @@ const App = (() => {
       await _fetchAndRenderBoard();
     });
 
-    // Wire task card clicks
     document.querySelectorAll('[data-task-id]').forEach(el => {
       el.addEventListener('click', () => {
         const id   = parseInt(el.dataset.taskId);
         const task = _taskState.allTasks.find(t => t.id === id);
         if (task) {
-          Drawer.open(task, projectId, _onTaskStatusChanged);
-          Drawer.setMeta(projectId, task.id);
+          Drawer.open(task, _taskState.projectId, _onTaskStatusChanged);
+          Drawer.setMeta(_taskState.projectId, task.id);
         }
       });
     });
@@ -795,13 +769,11 @@ const App = (() => {
   }
 
   function _onTaskStatusChanged(updatedTask) {
-    // Update in local state and re-render board
     const idx = _taskState.allTasks.findIndex(t => t.id === updatedTask.id);
     if (idx > -1) _taskState.allTasks[idx] = updatedTask;
     _fetchAndRenderBoard();
   }
 
-  /* ── New task modal ── */
   function _openNewTaskModal(defaultStatus = 'todo') {
     Modal.open({
       title: 'Nova tarefa',
@@ -858,11 +830,11 @@ const App = (() => {
 
           const data = {
             title,
-            description:  $('tf-desc').value.trim()     || null,
+            description:  $('tf-desc').value.trim()       || null,
             status:       $('tf-status').value,
             priority:     $('tf-priority').value,
             assigned_to:  parseInt($('tf-assigned').value) || null,
-            deadline:     $('tf-deadline').value || null,
+            deadline:     $('tf-deadline').value           || null,
           };
 
           await withLoading($('tf-submit'), async () => {
@@ -881,14 +853,10 @@ const App = (() => {
     });
   }
 
-  /* Atalho: botão "Adicionar" direto na coluna */
   function _quickAddTask(status) {
     _openNewTaskModal(status);
   }
 
-  /* ══════════════════════════════════════════
-     Org edit (chamado do dashboard)
-  ═══════════════════════════════════════════ */
   function _editOrg() {
     if (!state.org) return;
     Modal.open({
