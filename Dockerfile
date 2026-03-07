@@ -10,8 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN chmod +x entrypoint.sh  # ← permissão de execução
+RUN chmod +x entrypoint.sh
 
 EXPOSE 5000
 
-CMD ["./entrypoint.sh"]  # ← usa o entrypoint
+CMD ["./entrypoint.sh"]
