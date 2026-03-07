@@ -17,7 +17,7 @@ def create_app():
         description="API corporativa de gestão de tarefas estilo Jira/Trello"
     )
 
-    security_schemes = {"bearerAuth": SecurityScheme(type="http", scheme="bearee")}
+    security_schemes = {"bearerAuth": SecurityScheme(type="http", scheme="bearer")}
     
     app = OpenAPI(__name__, info=info, security_schemes=security_schemes, template_folder="../templates")
     app.config.from_object(config_by_name[env])
