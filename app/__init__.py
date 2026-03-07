@@ -18,8 +18,17 @@ def create_app():
     )
 
     security_schemes = {"bearerAuth": SecurityScheme(type="http", scheme="bearer")}
-    
-    app = OpenAPI(__name__, info=info, security_schemes=security_schemes, template_folder="../templates")
+
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    app = OpenAPI(
+        __name__,
+        info=info,
+        security_schemes=security_schemes,
+        template_folder=os.path.join(BASE_DIR, "templates"),
+        static_folder=os.path.join(BASE_DIR, "static"),
+        static_url_path="/static",
+    )
     app.config.from_object(config_by_name[env])
 
     # Extensions
