@@ -4,7 +4,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      FLASK_ENV: dev
+      FLASK_ENV: prod
       SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: ${DATABASE_URL}
     volumes:
