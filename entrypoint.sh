@@ -4,4 +4,4 @@ echo "Rodando migrations..."
 flask db upgrade
 
 echo "Iniciando API..."
-exec flask run --port=5000
+exec flask run --host=0.0.0.0 --port=5000
