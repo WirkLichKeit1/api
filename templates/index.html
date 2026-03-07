@@ -2024,7 +2024,7 @@ async function loadApp() {
   const payload = parseJwt(state.accessToken);
   if (payload) {
     document.getElementById('user-avatar').textContent = 'U';
-    document.getElementById('user-name-display').textContent = state.user.name + payload.sub;
+    document.getElementById('user-name-display').textContent = state.user.name + ` #${payload.sub}`;
     document.getElementById('user-role-display').textContent = state.user.role;
   }
 }
