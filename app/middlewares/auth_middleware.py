@@ -18,7 +18,6 @@ def auth_required(role=None, require_org=True):
             token = auth_header.split(" ")[1]
             try:
                 payload = decode_token(token)
-                print("payload:", payload)
             except pyjwt.ExpiredSignatureError:
                 return jsonify({"error": "Token expired"}), 401
             except pyjwt.InvalidTokenError:
