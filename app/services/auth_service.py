@@ -37,6 +37,7 @@ class AuthService:
         refresh_token, _, _ = generate_refresh_token(user.id)
 
         return {
+            "user": user,
             "access_token": access_token,
             "refresh_token": refresh_token
         }
