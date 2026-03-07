@@ -13,4 +13,4 @@ def register_v1_routes(app, prefix):
     app.register_api(projects_bp, url_prefix=prefix)
     app.register_api(tasks_bp, url_prefix=prefix)
     app.register_api(comments_bp, url_prefix=prefix)
-    app.register_blueprint(front_bp, url_prefix=prefix)
+    app.register_blueprint(front_bp)
