@@ -2,9 +2,6 @@
    LAYOUT — app shell · sidebar · topbar · content
 ═══════════════════════════════════════════════ */
 
-/* ──────────────────────────────────────
-   APP SHELL
-────────────────────────────────────── */
 #app-root {
   min-height: 100vh;
 }
@@ -19,17 +16,21 @@
 
 /* ──────────────────────────────────────
    AUTH SCREEN
+   FIX: display:flex APENAS quando .active.
+   Seletores de ID (#screen-*) têm especificidade 1-0-0 que sobrescreve
+   .screen { display:none } (0-1-0). Movendo display para o seletor
+   composto #screen-auth.active, a tela fica oculta quando inativa.
 ────────────────────────────────────── */
-#screen-auth {
-  min-height: 100vh;
+#screen-auth.active {
   display: flex;
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
   padding: 24px;
   position: relative;
 }
 
-#screen-auth::before {
+#screen-auth.active::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -40,9 +41,10 @@
 }
 
 /* ──────────────────────────────────────
-   MAIN APP (sidebar + content)
+   MAIN APP
+   FIX: mesmo problema — display:flex só com .active
 ────────────────────────────────────── */
-#screen-app {
+#screen-app.active {
   display: flex;
   min-height: 100vh;
 }
@@ -85,9 +87,7 @@
   flex-shrink: 0;
 }
 
-.sidebar__logo-mark svg {
-  color: #000;
-}
+.sidebar__logo-mark svg { color: #000; }
 
 .sidebar__logo-text {
   font-family: var(--font-mono);
@@ -108,7 +108,6 @@
   border-radius: 3px;
 }
 
-/* Nav sections */
 .sidebar__nav {
   flex: 1;
   padding: 10px 8px;
@@ -152,21 +151,11 @@
   transition: opacity .12s;
 }
 
-.nav-item:hover {
-  color: var(--text);
-  background: var(--surface2);
-}
-
+.nav-item:hover { color: var(--text); background: var(--surface2); }
 .nav-item:hover svg { opacity: 1; }
 
-.nav-item.active {
-  color: var(--text);
-  background: var(--surface3);
-  font-weight: 500;
-}
-
+.nav-item.active { color: var(--text); background: var(--surface3); font-weight: 500; }
 .nav-item.active svg { opacity: 1; }
-
 .nav-item.active::before {
   content: '';
   position: absolute;
@@ -189,7 +178,6 @@
   text-align: center;
 }
 
-/* Sidebar footer: user chip */
 .sidebar__footer {
   padding: 10px 8px;
   border-top: 1px solid var(--border);
@@ -205,7 +193,6 @@
   cursor: default;
   transition: background .12s;
 }
-
 .user-chip:hover { background: var(--surface2); }
 
 .user-avatar {
@@ -225,10 +212,7 @@
   text-transform: uppercase;
 }
 
-.user-info {
-  min-width: 0;
-  flex: 1;
-}
+.user-info { min-width: 0; flex: 1; }
 
 .user-name {
   font-size: 0.82rem;
@@ -292,13 +276,8 @@
   color: var(--muted);
 }
 
-.topbar__breadcrumb-sep {
-  color: var(--border2);
-}
-
-.topbar__breadcrumb-current {
-  color: var(--text-dim);
-}
+.topbar__breadcrumb-sep { color: var(--border2); }
+.topbar__breadcrumb-current { color: var(--text-dim); }
 
 .topbar__title {
   font-family: var(--font-mono);
@@ -335,10 +314,7 @@
   margin-bottom: 24px;
 }
 
-.page__header-info h1 {
-  font-size: 1.15rem;
-}
-
+.page__header-info h1 { font-size: 1.15rem; }
 .page__header-info p {
   font-size: 0.78rem;
   color: var(--muted);
@@ -354,10 +330,11 @@
 
 /* ──────────────────────────────────────
    ORG SETUP SCREEN
+   FIX: display:flex APENAS quando .active
 ────────────────────────────────────── */
-#screen-org-setup {
-  min-height: 100vh;
+#screen-org-setup.active {
   display: flex;
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
   padding: 24px;
@@ -373,10 +350,7 @@
 
 @media (max-width: 700px) {
   .sidebar { display: none; }
-
   .page { padding: 16px; }
-
   .topbar { padding: 0 16px; }
-
   .topbar__title { max-width: 160px; }
 }

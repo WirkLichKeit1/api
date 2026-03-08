@@ -47,7 +47,7 @@ def join_organization(path: IdPath):
 @auth_required()
 def get_organization(path: IdPath):
     try:
-        if g.current_user.organization_id != id:
+        if g.current_user.organization_id != path.id:
             return jsonify({"error": "Forbidden"}), 403
         org = OrganizationService.get_one(path.id)
         return jsonify(OrganizationResponseSchema.model_validate(org).model_dump())
@@ -61,7 +61,7 @@ def get_organization(path: IdPath):
 @auth_required(role="admin")
 def update_organization(path: IdPath, body: OrganizationUpdateSchema):
     try:
-        if g.current_user.organization_id != id:
+        if g.current_user.organization_id != path.id:
             return jsonify({"error": "Forbidden"}), 403
         org = OrganizationService.update(path.id, body.model_dump(exclude_none=True))
         return jsonify(OrganizationResponseSchema.model_validate(org).model_dump())
@@ -75,7 +75,7 @@ def update_organization(path: IdPath, body: OrganizationUpdateSchema):
 @auth_required(role="admin")
 def delete_organization(path: IdPath):
     try:
-        if g.current_user.organization_id != id:
+        if g.current_user.organization_id != path.id:
             return jsonify({"error": "Forbidden"}), 403
         OrganizationService.delete(path.id)
         return jsonify({"message": "Organization deleted"}), 200

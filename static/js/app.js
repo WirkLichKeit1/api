@@ -1,5 +1,12 @@
 /**
  * app.js — Orquestrador principal da SPA
+ *
+ * FIXES nesta versão:
+ *   1. _setupAuthScreen()    guarda flag _authInitialized    — sem listeners duplicados
+ *   2. _setupOrgSetupScreen() guarda flag _orgSetupInitialized — sem listeners duplicados
+ *   3. _setupAppShell()      guarda flag _shellInitialized   — comportamento anterior mantido
+ *   4. _navigate(user)       ponto único de roteamento pós-login
+ *   5. _doLogout()           reset centralizado de estado e flags
  */
 
 const App = (() => {
@@ -12,63 +19,72 @@ const App = (() => {
     currentProject: null,
   };
 
-  // FIX: flag para evitar que _initAppShell registre listeners duplicados
-  // em fluxos de logout → re-login sem reload de página
-  let _shellInitialized = false;
+  let _authInitialized     = false;
+  let _orgSetupInitialized = false;
+  let _shellInitialized    = false;
 
   /* ══════════════════════════════════════════
      INIT
   ═══════════════════════════════════════════ */
   async function init() {
-    // FIX: _initAuth() precisa ser chamada sempre, não só quando não autenticado
-    _initAuth();
+    _setupAuthScreen();            // registra listeners da auth — apenas uma vez
 
     if (!Auth.isAuthenticated()) {
-      showScreen('auth');
+      _showScreen('auth');
       return;
     }
 
     state.user = Auth.getUser();
+    await _navigate(state.user);
+  }
 
-    if (!state.user.organization_id) {
-      showScreen('org-setup');
-      _initOrgSetup();
+  /* Ponto único de roteamento — chamado após login, registro e no init() */
+  async function _navigate(user) {
+    if (!user) {
+      _showScreen('auth');
+      return;
+    }
+
+    if (!user.organization_id) {
+      _setupOrgSetupScreen();
+      _showScreen('org-setup');
       return;
     }
 
     try {
-      const orgData = await OrgAPI.get(state.user.organization_id);
-      state.org = orgData;
+      state.org = await OrgAPI.get(user.organization_id);
     } catch (e) {
       if (e.response?.status === 403 || e.response?.status === 404) {
         Auth.clearSession();
-        showScreen('auth');
+        _showScreen('auth');
         return;
       }
+      // outros erros: prossegue sem org (dashboard vai lidar)
     }
 
-    _initAppShell();
-    showScreen('app');
+    _setupAppShell();
+    _showScreen('app');
     Router.start();
   }
 
   /* ══════════════════════════════════════════
      SCREEN MANAGEMENT
   ═══════════════════════════════════════════ */
-  function showScreen(name) {
+  function _showScreen(name) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById(`screen-${name}`);
     if (el) el.classList.add('active');
   }
 
-  function goTo(name) {
-    showScreen(name);
-  }
+  function goTo(name) { _showScreen(name); }
 
   /* ══════════════════════════════════════════
      AUTH SCREEN
   ═══════════════════════════════════════════ */
-  function _initAuth() {
+  function _setupAuthScreen() {
+    if (_authInitialized) return;   // FIX: registra listeners somente uma vez
+    _authInitialized = true;
+
     const tabLogin    = $('auth-tab-login');
     const tabRegister = $('auth-tab-register');
     const formLogin   = $('auth-form-login');
@@ -92,7 +108,6 @@ const App = (() => {
       errorReg.textContent = '';
     });
 
-    // LOGIN submit
     $('btn-login').addEventListener('click', async () => {
       errorLogin.textContent = '';
       const email    = $('login-email').value.trim();
@@ -107,16 +122,7 @@ const App = (() => {
         try {
           const user = await Auth.login(email, password);
           state.user = user;
-          if (!user.organization_id) {
-            showScreen('org-setup');
-            _initOrgSetup();
-          } else {
-            const orgData = await OrgAPI.get(user.organization_id);
-            state.org = orgData;
-            _initAppShell();
-            showScreen('app');
-            Router.start();
-          }
+          await _navigate(user);         // usa _navigate centralizado
         } catch (e) {
           errorLogin.textContent = apiErrorMessage(e);
         }
@@ -127,7 +133,6 @@ const App = (() => {
       el.addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-login').click(); });
     });
 
-    // REGISTER submit
     $('btn-register').addEventListener('click', async () => {
       errorReg.textContent = '';
       const name     = $('reg-name').value.trim();
@@ -144,9 +149,8 @@ const App = (() => {
           await Auth.register(name, email, password);
           const user = await Auth.login(email, password);
           state.user = user;
-          showScreen('org-setup');
-          _initOrgSetup();
           Toast.success('Conta criada com sucesso!');
+          await _navigate(user);
         } catch (e) {
           errorReg.textContent = apiErrorMessage(e);
         }
@@ -157,7 +161,10 @@ const App = (() => {
   /* ══════════════════════════════════════════
      ORG SETUP SCREEN
   ═══════════════════════════════════════════ */
-  function _initOrgSetup() {
+  function _setupOrgSetupScreen() {
+    if (_orgSetupInitialized) return;  // FIX: guarda para evitar duplicatas
+    _orgSetupInitialized = true;
+
     const btnCreate   = $('org-btn-create');
     const btnJoin     = $('org-btn-join');
     const panelCreate = $('org-panel-create');
@@ -186,8 +193,8 @@ const App = (() => {
           const org = await OrgAPI.create(name);
           state.org = org;
           state.user = Auth.patchUser({ organization_id: org.id, role: 'admin' });
-          _initAppShell();
-          showScreen('app');
+          _setupAppShell();
+          _showScreen('app');
           Router.start();
           Toast.success(`Organização "${name}" criada!`);
         } catch (e) {
@@ -206,8 +213,8 @@ const App = (() => {
           state.org = org;
           state.user = Auth.patchUser({ organization_id: org.id });
           Auth.saveUser(state.user);
-          _initAppShell();
-          showScreen('app');
+          _setupAppShell();
+          _showScreen('app');
           Router.start();
           Toast.success(`Entrou em "${org.name}"!`);
         } catch (e) {
@@ -221,7 +228,7 @@ const App = (() => {
       logoutLink.addEventListener('click', async (e) => {
         e.preventDefault();
         await Auth.logout();
-        showScreen('auth');
+        _doLogout();
       });
     }
   }
@@ -229,14 +236,13 @@ const App = (() => {
   /* ══════════════════════════════════════════
      APP SHELL (sidebar + topbar)
   ═══════════════════════════════════════════ */
-  function _initAppShell() {
-    // Sempre atualiza os dados visuais do usuário no chip
+  function _setupAppShell() {
+    // Atualiza dados visuais sempre
     const u = state.user;
     $('shell-user-name').textContent   = u?.name || 'Usuário';
     $('shell-user-role').textContent   = u?.role || 'member';
     $('shell-user-avatar').textContent = (u?.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-    // FIX: listeners registrados apenas uma vez por ciclo de vida da página
     if (_shellInitialized) return;
     _shellInitialized = true;
 
@@ -248,11 +254,7 @@ const App = (() => {
       });
       if (!ok) return;
       await Auth.logout();
-      state.user        = null;
-      state.org         = null;
-      state.projects    = [];
-      _shellInitialized = false; // permite re-inicializar após novo login
-      showScreen('auth');
+      _doLogout();
     });
 
     Router.on('dashboard',    () => _viewDashboard());
@@ -265,6 +267,18 @@ const App = (() => {
 
     window.addEventListener('hashchange', _updateNavActive);
     _updateNavActive();
+  }
+
+  /* Reset centralizado pós-logout */
+  function _doLogout() {
+    state.user     = null;
+    state.org      = null;
+    state.projects = [];
+    _shellInitialized    = false;  // re-inicializa no próximo login
+    _orgSetupInitialized = false;  // re-inicializa se necessário
+    // _authInitialized permanece true — auth screen é permanente
+    window.location.hash = '';
+    _showScreen('auth');
   }
 
   function _updateNavActive() {
@@ -910,3 +924,5 @@ const App = (() => {
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });
+
+window.App = App;

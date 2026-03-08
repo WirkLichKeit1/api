@@ -101,3 +101,5 @@ const Auth = (() => {
     logout,
   };
 })();
+
+window.Auth = Auth;
