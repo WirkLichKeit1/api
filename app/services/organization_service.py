@@ -37,6 +37,11 @@ class OrganizationService:
         return org
 
     @staticmethod
+    def get_members(id: int) -> list:
+        OrganizationService.get_one(id)
+        return org_repo.get_members(organization_id=id)
+
+    @staticmethod
     def update(id: int, data: dict) -> Organization:
         org = OrganizationService.get_one(id)
 

@@ -7,7 +7,8 @@ from app.services.organization_service import OrganizationService
 from app.schemas.organization_schema import (
     OrganizationCreateSchema,
     OrganizationUpdateSchema,
-    OrganizationResponseSchema
+    OrganizationResponseSchema,
+    MemberResponseSchema
 )
 from app.schemas.path_schema import IdPath
 
@@ -51,6 +52,19 @@ def get_organization(path: IdPath):
             return jsonify({"error": "Forbidden"}), 403
         org = OrganizationService.get_one(path.id)
         return jsonify(OrganizationResponseSchema.model_validate(org).model_dump())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+@org_bp.get("/organizations/<int:id>/members",
+    summary="Listar membros da organização",
+    responses={"200": MemberResponseSchema, "403": None, "404": None}
+)
+def get_organizations_members(path: IdPath):
+    try:
+        if g.current_user.organization_id != path.id:
+            return jsonify({"error": "Forbidden"}), 403
+        members = OrganizationService.get_members(path.id)
+        return jsonify([MemberResponseSchema.model_validate(m).model_dump() for m in members])
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 

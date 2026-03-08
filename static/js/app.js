@@ -1,12 +1,17 @@
 /**
  * app.js — Orquestrador principal da SPA
  *
- * FIXES nesta versão:
- *   1. _setupAuthScreen()    guarda flag _authInitialized    — sem listeners duplicados
+ * FEATURES nesta versão:
+ *   1. _setupAuthScreen()     guarda flag _authInitialized    — sem listeners duplicados
  *   2. _setupOrgSetupScreen() guarda flag _orgSetupInitialized — sem listeners duplicados
- *   3. _setupAppShell()      guarda flag _shellInitialized   — comportamento anterior mantido
- *   4. _navigate(user)       ponto único de roteamento pós-login
- *   5. _doLogout()           reset centralizado de estado e flags
+ *   3. _setupAppShell()       guarda flag _shellInitialized   — comportamento anterior mantido
+ *   4. _navigate(user)        ponto único de roteamento pós-login
+ *   5. _doLogout()            reset centralizado de estado e flags
+ *   6. state.members          cache de membros da org para resolver nomes por ID
+ *   7. _viewMembers()         nova página com lista de membros
+ *   8. Assignee exibe nome em tasks e no drawer
+ *   9. Comentários exibem nome do autor
+ *  10. Botão Dashboard na topbar de Projects e Members
  */
 
 const App = (() => {
@@ -17,17 +22,42 @@ const App = (() => {
     org:            null,
     projects:       [],
     currentProject: null,
+    members:        [],
   };
 
   let _authInitialized     = false;
   let _orgSetupInitialized = false;
   let _shellInitialized    = false;
 
+  /* ── Helpers de membros ── */
+  function _memberName(id) {
+    if (!id) return null;
+    const m = state.members.find(m => m.id === id);
+    return m ? m.name : null;
+  }
+
+  function _memberLabel(id) {
+    if (!id) return '—';
+    const name = _memberName(id);
+    return name
+      ? `${escHtml(name)} <span class="text-muted text-xs">#${id}</span>`
+      : `#${id}`;
+  }
+
+  async function _loadMembers() {
+    if (!state.org) return;
+    try {
+      state.members = await OrgAPI.getMembers(state.org.id);
+    } catch {
+      state.members = [];
+    }
+  }
+
   /* ══════════════════════════════════════════
      INIT
   ═══════════════════════════════════════════ */
   async function init() {
-    _setupAuthScreen();            // registra listeners da auth — apenas uma vez
+    _setupAuthScreen();
 
     if (!Auth.isAuthenticated()) {
       _showScreen('auth');
@@ -38,12 +68,8 @@ const App = (() => {
     await _navigate(state.user);
   }
 
-  /* Ponto único de roteamento — chamado após login, registro e no init() */
   async function _navigate(user) {
-    if (!user) {
-      _showScreen('auth');
-      return;
-    }
+    if (!user) { _showScreen('auth'); return; }
 
     if (!user.organization_id) {
       _setupOrgSetupScreen();
@@ -59,8 +85,9 @@ const App = (() => {
         _showScreen('auth');
         return;
       }
-      // outros erros: prossegue sem org (dashboard vai lidar)
     }
+
+    await _loadMembers();
 
     _setupAppShell();
     _showScreen('app');
@@ -72,7 +99,7 @@ const App = (() => {
   ═══════════════════════════════════════════ */
   function _showScreen(name) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const el = document.getElementById(`screen-${name}`);
+    const el = document.getElementById('screen-' + name);
     if (el) el.classList.add('active');
   }
 
@@ -82,7 +109,7 @@ const App = (() => {
      AUTH SCREEN
   ═══════════════════════════════════════════ */
   function _setupAuthScreen() {
-    if (_authInitialized) return;   // FIX: registra listeners somente uma vez
+    if (_authInitialized) return;
     _authInitialized = true;
 
     const tabLogin    = $('auth-tab-login');
@@ -112,17 +139,12 @@ const App = (() => {
       errorLogin.textContent = '';
       const email    = $('login-email').value.trim();
       const password = $('login-password').value;
-
-      if (!email || !password) {
-        errorLogin.textContent = 'Preencha todos os campos.';
-        return;
-      }
-
+      if (!email || !password) { errorLogin.textContent = 'Preencha todos os campos.'; return; }
       await withLoading($('btn-login'), async () => {
         try {
           const user = await Auth.login(email, password);
           state.user = user;
-          await _navigate(user);         // usa _navigate centralizado
+          await _navigate(user);
         } catch (e) {
           errorLogin.textContent = apiErrorMessage(e);
         }
@@ -138,12 +160,7 @@ const App = (() => {
       const name     = $('reg-name').value.trim();
       const email    = $('reg-email').value.trim();
       const password = $('reg-password').value;
-
-      if (!name || !email || !password) {
-        errorReg.textContent = 'Preencha todos os campos.';
-        return;
-      }
-
+      if (!name || !email || !password) { errorReg.textContent = 'Preencha todos os campos.'; return; }
       await withLoading($('btn-register'), async () => {
         try {
           await Auth.register(name, email, password);
@@ -162,7 +179,7 @@ const App = (() => {
      ORG SETUP SCREEN
   ═══════════════════════════════════════════ */
   function _setupOrgSetupScreen() {
-    if (_orgSetupInitialized) return;  // FIX: guarda para evitar duplicatas
+    if (_orgSetupInitialized) return;
     _orgSetupInitialized = true;
 
     const btnCreate   = $('org-btn-create');
@@ -187,39 +204,35 @@ const App = (() => {
     $('org-create-submit').addEventListener('click', async () => {
       const name = $('org-create-name').value.trim();
       if (!name) { Toast.warning('Digite um nome para a organização.'); return; }
-
       await withLoading($('org-create-submit'), async () => {
         try {
           const org = await OrgAPI.create(name);
-          state.org = org;
+          state.org  = org;
           state.user = Auth.patchUser({ organization_id: org.id, role: 'admin' });
+          await _loadMembers();
           _setupAppShell();
           _showScreen('app');
           Router.start();
-          Toast.success(`Organização "${name}" criada!`);
-        } catch (e) {
-          Toast.error(apiErrorMessage(e));
-        }
+          Toast.success('Organização "' + name + '" criada!');
+        } catch (e) { Toast.error(apiErrorMessage(e)); }
       });
     });
 
     $('org-join-submit').addEventListener('click', async () => {
       const orgId = parseInt($('org-join-id').value.trim());
       if (!orgId) { Toast.warning('Digite o ID da organização.'); return; }
-
       await withLoading($('org-join-submit'), async () => {
         try {
-          const org = await OrgAPI.join(orgId);
-          state.org = org;
+          const org  = await OrgAPI.join(orgId);
+          state.org  = org;
           state.user = Auth.patchUser({ organization_id: org.id });
           Auth.saveUser(state.user);
+          await _loadMembers();
           _setupAppShell();
           _showScreen('app');
           Router.start();
-          Toast.success(`Entrou em "${org.name}"!`);
-        } catch (e) {
-          Toast.error(apiErrorMessage(e));
-        }
+          Toast.success('Entrou em "' + org.name + '"!');
+        } catch (e) { Toast.error(apiErrorMessage(e)); }
       });
     });
 
@@ -234,10 +247,9 @@ const App = (() => {
   }
 
   /* ══════════════════════════════════════════
-     APP SHELL (sidebar + topbar)
+     APP SHELL
   ═══════════════════════════════════════════ */
   function _setupAppShell() {
-    // Atualiza dados visuais sempre
     const u = state.user;
     $('shell-user-name').textContent   = u?.name || 'Usuário';
     $('shell-user-role').textContent   = u?.role || 'member';
@@ -247,11 +259,7 @@ const App = (() => {
     _shellInitialized = true;
 
     $('btn-shell-logout').addEventListener('click', async () => {
-      const ok = await confirmDialog({
-        title: 'Sair',
-        message: 'Deseja encerrar sua sessão?',
-        confirmLabel: 'Sair',
-      });
+      const ok = await confirmDialog({ title: 'Sair', message: 'Deseja encerrar sua sessão?', confirmLabel: 'Sair' });
       if (!ok) return;
       await Auth.logout();
       _doLogout();
@@ -260,6 +268,7 @@ const App = (() => {
     Router.on('dashboard',    () => _viewDashboard());
     Router.on('projects',     () => _viewProjects());
     Router.on('projects/:id', ({ id }) => _viewTasks(parseInt(id)));
+    Router.on('members',      () => _viewMembers());
 
     document.querySelectorAll('[data-nav]').forEach(el => {
       el.addEventListener('click', () => Router.navigate(el.dataset.nav));
@@ -269,14 +278,13 @@ const App = (() => {
     _updateNavActive();
   }
 
-  /* Reset centralizado pós-logout */
   function _doLogout() {
     state.user     = null;
     state.org      = null;
     state.projects = [];
-    _shellInitialized    = false;  // re-inicializa no próximo login
-    _orgSetupInitialized = false;  // re-inicializa se necessário
-    // _authInitialized permanece true — auth screen é permanente
+    state.members  = [];
+    _shellInitialized    = false;
+    _orgSetupInitialized = false;
     window.location.hash = '';
     _showScreen('auth');
   }
@@ -289,21 +297,15 @@ const App = (() => {
     });
   }
 
-  function _setTopbar(title, breadcrumb = null, actions = '') {
+  function _setTopbar(title, breadcrumb, actions) {
     $('topbar-title').textContent = title;
     const bc = $('topbar-breadcrumb');
-    if (breadcrumb) {
-      bc.innerHTML = breadcrumb;
-      bc.style.display = 'flex';
-    } else {
-      bc.style.display = 'none';
-    }
-    $('topbar-actions').innerHTML = actions;
+    if (breadcrumb) { bc.innerHTML = breadcrumb; bc.style.display = 'flex'; }
+    else { bc.style.display = 'none'; }
+    $('topbar-actions').innerHTML = actions || '';
   }
 
-  function _setContent(html) {
-    $('main-view').innerHTML = html;
-  }
+  function _setContent(html) { $('main-view').innerHTML = html; }
 
   /* ══════════════════════════════════════════
      VIEW: DASHBOARD
@@ -311,30 +313,21 @@ const App = (() => {
   async function _viewDashboard() {
     _updateNavActive();
     _setTopbar('Dashboard');
-    _setContent(`<div class="loading-center"><div class="spinner"></div></div>`);
+    _setContent('<div class="loading-center"><div class="spinner"></div></div>');
 
     try {
       const projects = await ProjectsAPI.list();
       state.projects = projects;
 
-      let totalTasks = 0, totalTodo = 0, totalDoing = 0, totalDone = 0;
-
-      const taskPromises = projects.slice(0, 6).map(p =>
-        TasksAPI.list(p.id, { per_page: 1 }).catch(() => null)
-      );
-      const taskResults = await Promise.all(taskPromises);
-      taskResults.forEach(r => { if (r) totalTasks += r.total; });
-
+      let totalTodo = 0, totalDone = 0;
       if (projects.length) {
         const pid = projects[0].id;
-        const [todo, doing, done] = await Promise.all([
+        const [todo, done] = await Promise.all([
           TasksAPI.list(pid, { status: 'todo',  per_page: 1 }).catch(() => ({ total: 0 })),
-          TasksAPI.list(pid, { status: 'doing', per_page: 1 }).catch(() => ({ total: 0 })),
           TasksAPI.list(pid, { status: 'done',  per_page: 1 }).catch(() => ({ total: 0 })),
         ]);
-        totalTodo  = todo.total;
-        totalDoing = doing.total;
-        totalDone  = done.total;
+        totalTodo = todo.total;
+        totalDone = done.total;
       }
 
       const recentProjects = [...projects]
@@ -346,9 +339,15 @@ const App = (() => {
           <div class="org-banner">
             <div>
               <div class="org-banner__name">${escHtml(state.org?.name || '—')}</div>
-              <div class="org-banner__meta">ID #${state.org?.id || '?'} · ${state.user?.role || 'member'}</div>
+              <div class="org-banner__meta">ID #${state.org?.id || '?'} · ${state.members.length} membro${state.members.length !== 1 ? 's' : ''}</div>
             </div>
-            <span class="badge badge-${state.user?.role === 'admin' ? 'admin' : 'member'}">${state.user?.role || 'member'}</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="badge badge-${state.user?.role === 'admin' ? 'admin' : 'member'}">${state.user?.role || 'member'}</span>
+              <button class="btn btn-ghost btn-sm" onclick="Router.navigate('members')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Membros
+              </button>
+            </div>
           </div>
 
           <div class="stat-grid">
@@ -357,8 +356,8 @@ const App = (() => {
               <div class="stat-card__label">Projetos</div>
             </div>
             <div class="stat-card stat-card--info">
-              <div class="stat-card__value">${totalTasks}</div>
-              <div class="stat-card__label">Tarefas (proj.1)</div>
+              <div class="stat-card__value">${state.members.length}</div>
+              <div class="stat-card__label">Membros</div>
             </div>
             <div class="stat-card stat-card--danger">
               <div class="stat-card__value">${totalTodo}</div>
@@ -386,13 +385,11 @@ const App = (() => {
                     </div>
                   `).join('')}
                 </div>
-              ` : `<p class="text-muted text-sm">Nenhum projeto ainda.</p>`}
+              ` : '<p class="text-muted text-sm">Nenhum projeto ainda.</p>'}
             </div>
 
             <div class="card">
-              <div class="card-header">
-                <h3>Organização</h3>
-              </div>
+              <div class="card-header"><h3>Organização</h3></div>
               <div style="display:flex;flex-direction:column;gap:12px;">
                 <div>
                   <div class="drawer-section__label">Nome</div>
@@ -406,18 +403,15 @@ const App = (() => {
                   <div class="drawer-section__label">Seu papel</div>
                   <span class="badge badge-${state.user?.role === 'admin' ? 'admin' : 'member'}">${state.user?.role}</span>
                 </div>
-                ${state.user?.role === 'admin' ? `
-                  <button class="btn btn-sm" onclick="App._editOrg()">Editar organização</button>
-                ` : ''}
+                ${state.user?.role === 'admin' ? '<button class="btn btn-sm" onclick="App._editOrg()">Editar organização</button>' : ''}
               </div>
             </div>
           </div>
         </div>
       `;
-
       _setContent(html);
     } catch (e) {
-      _setContent(`<div class="page"><p class="text-muted">Erro ao carregar dashboard: ${apiErrorMessage(e)}</p></div>`);
+      _setContent('<div class="page"><p class="text-muted">Erro ao carregar dashboard: ' + apiErrorMessage(e) + '</p></div>');
     }
   }
 
@@ -426,15 +420,22 @@ const App = (() => {
   ═══════════════════════════════════════════ */
   async function _viewProjects() {
     _updateNavActive();
-    _setTopbar('Projetos');
-    _setContent(`<div class="loading-center"><div class="spinner"></div></div>`);
+    _setTopbar(
+      'Projetos',
+      null,
+      '<button class="btn btn-ghost btn-sm" onclick="Router.navigate(\'dashboard\')">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' +
+        ' Dashboard' +
+      '</button>'
+    );
+    _setContent('<div class="loading-center"><div class="spinner"></div></div>');
 
     try {
       const projects = await ProjectsAPI.list();
       state.projects = projects;
       _renderProjectsPage(projects);
     } catch (e) {
-      _setContent(`<div class="page"><p class="text-muted">Erro: ${apiErrorMessage(e)}</p></div>`);
+      _setContent('<div class="page"><p class="text-muted">Erro: ' + apiErrorMessage(e) + '</p></div>');
     }
   }
 
@@ -453,14 +454,13 @@ const App = (() => {
             </button>
           </div>
         </div>
-
         ${projects.length === 0 ? `
           <div class="empty-state">
             <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
             <div class="empty-state__title">Nenhum projeto ainda</div>
-            <p class="empty-state__desc">Crie seu primeiro projeto para começar a organizar tarefas.</p>
+            <p class="empty-state__desc">Crie seu primeiro projeto para começar.</p>
           </div>
         ` : `
           <div class="projects-grid" id="projects-grid">
@@ -469,19 +469,16 @@ const App = (() => {
         `}
       </div>
     `;
-
     _setContent(html);
 
     $('btn-new-project')?.addEventListener('click', () => _openNewProjectModal());
-
     document.querySelectorAll('[data-open-project]').forEach(el => {
-      el.addEventListener('click', () => Router.navigate(`projects/${el.dataset.openProject}`));
+      el.addEventListener('click', () => Router.navigate('projects/' + el.dataset.openProject));
     });
     document.querySelectorAll('[data-edit-project]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id   = parseInt(el.dataset.editProject);
-        const proj = state.projects.find(p => p.id === id);
+        const proj = state.projects.find(p => p.id === parseInt(el.dataset.editProject));
         if (proj) _openEditProjectModal(proj);
       });
     });
@@ -492,9 +489,8 @@ const App = (() => {
         const proj = state.projects.find(p => p.id === id);
         const ok   = await confirmDialog({
           title: 'Excluir projeto',
-          message: `Excluir <strong>${escHtml(proj?.name)}</strong>? Esta ação não pode ser desfeita.`,
-          confirmLabel: 'Excluir',
-          danger: true,
+          message: 'Excluir <strong>' + escHtml(proj?.name) + '</strong>? Esta ação não pode ser desfeita.',
+          confirmLabel: 'Excluir', danger: true,
         });
         if (!ok) return;
         try {
@@ -502,9 +498,7 @@ const App = (() => {
           state.projects = state.projects.filter(p => p.id !== id);
           _renderProjectsPage(state.projects);
           Toast.success('Projeto excluído');
-        } catch (err) {
-          Toast.error(apiErrorMessage(err));
-        }
+        } catch (err) { Toast.error(apiErrorMessage(err)); }
       });
     });
   }
@@ -547,7 +541,6 @@ const App = (() => {
         const input = $('modal-project-name');
         const err   = $('modal-project-error');
         input.focus();
-
         const submit = async () => {
           const name = input.value.trim();
           if (!name) { err.textContent = 'Digite um nome.'; return; }
@@ -557,13 +550,10 @@ const App = (() => {
               state.projects.unshift(p);
               Modal.close();
               _renderProjectsPage(state.projects);
-              Toast.success(`Projeto "${p.name}" criado!`);
-            } catch (e) {
-              err.textContent = apiErrorMessage(e);
-            }
+              Toast.success('Projeto "' + p.name + '" criado!');
+            } catch (e) { err.textContent = apiErrorMessage(e); }
           });
         };
-
         $('modal-project-submit').addEventListener('click', submit);
         input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
       },
@@ -587,9 +577,7 @@ const App = (() => {
       onAfterOpen() {
         const input = $('modal-edit-project-name');
         const err   = $('modal-edit-project-error');
-        input.focus();
-        input.select();
-
+        input.focus(); input.select();
         $('modal-edit-project-submit').addEventListener('click', async () => {
           const name = input.value.trim();
           if (!name) { err.textContent = 'Digite um nome.'; return; }
@@ -601,9 +589,7 @@ const App = (() => {
               Modal.close();
               _renderProjectsPage(state.projects);
               Toast.success('Projeto atualizado');
-            } catch (e) {
-              err.textContent = apiErrorMessage(e);
-            }
+            } catch (e) { err.textContent = apiErrorMessage(e); }
           });
         });
       },
@@ -627,49 +613,39 @@ const App = (() => {
 
     _setTopbar(
       'Carregando…',
-      `<span class="topbar__breadcrumb-current">Projetos</span>
-       <span class="topbar__breadcrumb-sep">/</span>
-       <span>…</span>`
+      '<button class="btn btn-ghost btn-sm" onclick="Router.navigate(\'projects\')" style="padding:4px 8px;">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
+        ' Projetos</button><span class="topbar__breadcrumb-sep">/</span><span>…</span>'
     );
-    _setContent(`<div class="loading-center"><div class="spinner"></div></div>`);
+    _setContent('<div class="loading-center"><div class="spinner"></div></div>');
 
     try {
       const project = await ProjectsAPI.get(projectId);
-      _taskState.project = project;
+      _taskState.project   = project;
       state.currentProject = project;
 
       _setTopbar(
         project.name,
-        `<button class="btn btn-ghost btn-sm" onclick="Router.navigate('projects')" style="padding:4px 8px;">
-           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-           Projetos
-         </button>
-         <span class="topbar__breadcrumb-sep">/</span>
-         <span class="topbar__breadcrumb-current">${escHtml(project.name)}</span>`
+        '<button class="btn btn-ghost btn-sm" onclick="Router.navigate(\'projects\')" style="padding:4px 8px;">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
+          ' Projetos</button><span class="topbar__breadcrumb-sep">/</span>' +
+          '<span class="topbar__breadcrumb-current">' + escHtml(project.name) + '</span>'
       );
 
       await _fetchAndRenderBoard();
-
     } catch (e) {
-      _setContent(`<div class="page"><p class="text-muted">Projeto não encontrado ou sem acesso.</p></div>`);
+      _setContent('<div class="page"><p class="text-muted">Projeto não encontrado ou sem acesso.</p></div>');
     }
   }
 
   async function _fetchAndRenderBoard() {
     const { projectId, filters } = _taskState;
-
     const [todoRes, doingRes, doneRes] = await Promise.all([
       TasksAPI.list(projectId, { ...filters, status: 'todo',  page: 1, per_page: 30 }),
       TasksAPI.list(projectId, { ...filters, status: 'doing', page: 1, per_page: 30 }),
       TasksAPI.list(projectId, { ...filters, status: 'done',  page: 1, per_page: 30 }),
     ]);
-
-    _taskState.allTasks = [
-      ...todoRes.items,
-      ...doingRes.items,
-      ...doneRes.items,
-    ];
-
+    _taskState.allTasks = [...todoRes.items, ...doingRes.items, ...doneRes.items];
     _renderBoard({
       todo:  { items: todoRes.items,  total: todoRes.total },
       doing: { items: doingRes.items, total: doingRes.total },
@@ -679,7 +655,6 @@ const App = (() => {
 
   function _renderBoard(columns) {
     const { filters } = _taskState;
-
     const html = `
       <div class="page">
         <div class="kanban-toolbar">
@@ -687,19 +662,15 @@ const App = (() => {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nova tarefa
           </button>
-
           <span class="kanban-toolbar__sep"></span>
-
-          <select class="input" id="filter-priority" style="width:130px;" title="Filtrar por prioridade">
+          <select class="input" id="filter-priority" style="width:130px;">
             <option value="">Prioridade</option>
             <option value="high"   ${filters.priority==='high'   ? 'selected' : ''}>High</option>
             <option value="medium" ${filters.priority==='medium' ? 'selected' : ''}>Medium</option>
             <option value="low"    ${filters.priority==='low'    ? 'selected' : ''}>Low</option>
           </select>
-
-          ${filters.priority ? `<button class="btn btn-ghost btn-sm" id="btn-clear-filters">Limpar filtros</button>` : ''}
+          ${filters.priority ? '<button class="btn btn-ghost btn-sm" id="btn-clear-filters">Limpar filtros</button>' : ''}
         </div>
-
         <div class="kanban-board">
           ${_colHTML('todo',  'To Do',       columns.todo)}
           ${_colHTML('doing', 'In Progress', columns.doing)}
@@ -707,27 +678,23 @@ const App = (() => {
         </div>
       </div>
     `;
-
     _setContent(html);
 
     $('btn-new-task')?.addEventListener('click', () => _openNewTaskModal());
-
     $('filter-priority')?.addEventListener('change', async (e) => {
       _taskState.filters.priority = e.target.value;
       await _fetchAndRenderBoard();
     });
-
     $('btn-clear-filters')?.addEventListener('click', async () => {
       _taskState.filters = { status: '', priority: '', page: 1, per_page: 50 };
       await _fetchAndRenderBoard();
     });
-
     document.querySelectorAll('[data-task-id]').forEach(el => {
       el.addEventListener('click', () => {
         const id   = parseInt(el.dataset.taskId);
         const task = _taskState.allTasks.find(t => t.id === id);
         if (task) {
-          Drawer.open(task, _taskState.projectId, _onTaskStatusChanged);
+          Drawer.open(task, _taskState.projectId, _onTaskStatusChanged, state.members);
           Drawer.setMeta(_taskState.projectId, task.id);
         }
       });
@@ -736,29 +703,19 @@ const App = (() => {
 
   function _colHTML(status, label, col) {
     const { items, total } = col;
-    const extra = total > items.length ? ` (+${total - items.length})` : '';
-
+    const extra = total > items.length ? ' (+' + (total - items.length) + ')' : '';
     return `
       <div class="kanban-col kanban-col--${status}">
         <div class="kanban-col__header">
-          <span class="kanban-col__title">
-            <span class="kanban-col__dot"></span>
-            ${label}
-          </span>
+          <span class="kanban-col__title"><span class="kanban-col__dot"></span>${label}</span>
           <span class="kanban-col__count">${total}${extra}</span>
         </div>
         <div class="kanban-col__body">
           ${items.length === 0
-            ? `<div style="padding:16px 0;text-align:center;">
-                 <span class="text-muted text-xs">Nenhuma tarefa</span>
-               </div>`
-            : items.map(t => _taskCardHTML(t)).join('')
-          }
-          <button
-            class="btn btn-ghost btn-sm w-full"
-            style="margin-top:4px;justify-content:center;"
-            onclick="App._quickAddTask('${status}')"
-          >
+            ? '<div style="padding:16px 0;text-align:center;"><span class="text-muted text-xs">Nenhuma tarefa</span></div>'
+            : items.map(t => _taskCardHTML(t)).join('')}
+          <button class="btn btn-ghost btn-sm w-full" style="margin-top:4px;justify-content:center;"
+            onclick="App._quickAddTask('${status}')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Adicionar
           </button>
@@ -768,13 +725,21 @@ const App = (() => {
   }
 
   function _taskCardHTML(task) {
+    // Assignee: mostra primeiro nome + #id como tooltip, ou só #id
+    const name = task.assigned_to ? _memberName(task.assigned_to) : null;
+    const assigneeHTML = task.assigned_to
+      ? '<span class="task-card__assignee" title="' + escHtml(name ? name + ' #' + task.assigned_to : '#' + task.assigned_to) + '">' +
+          escHtml(name ? name.split(' ')[0] : '#' + task.assigned_to) +
+        '</span>'
+      : '';
+
     return `
       <div class="task-card" data-task-id="${task.id}">
         <div class="task-card__title">${escHtml(task.title)}</div>
         <div class="task-card__footer">
           <div class="task-card__badges">
             ${Render.priorityBadge(task.priority)}
-            ${task.assigned_to ? `<span class="task-card__assignee">#${task.assigned_to}</span>` : ''}
+            ${assigneeHTML}
           </div>
           ${Render.deadlineBadge(task.deadline)}
         </div>
@@ -788,7 +753,16 @@ const App = (() => {
     _fetchAndRenderBoard();
   }
 
-  function _openNewTaskModal(defaultStatus = 'todo') {
+  function _openNewTaskModal(defaultStatus) {
+    defaultStatus = defaultStatus || 'todo';
+
+    // Select de assignee com nomes se membros disponíveis, senão input numérico
+    const assigneeField = state.members.length
+      ? '<select class="input" id="tf-assigned"><option value="">— Nenhum —</option>' +
+          state.members.map(m => '<option value="' + m.id + '">' + escHtml(m.name) + ' (#' + m.id + ')</option>').join('') +
+        '</select>'
+      : '<input class="input" id="tf-assigned" type="number" placeholder="ID do usuário (opcional)" />';
+
     Modal.open({
       title: 'Nova tarefa',
       size: 'lg',
@@ -819,8 +793,8 @@ const App = (() => {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Atribuir a (ID usuário)</label>
-            <input class="input" id="tf-assigned" type="number" placeholder="Opcional" />
+            <label class="form-label">Atribuir a</label>
+            ${assigneeField}
           </div>
           <div class="form-group">
             <label class="form-label">Prazo</label>
@@ -836,21 +810,19 @@ const App = (() => {
       onAfterOpen() {
         const err = $('tf-error');
         $('tf-title').focus();
-
         $('tf-submit').addEventListener('click', async () => {
           err.textContent = '';
           const title = $('tf-title').value.trim();
           if (!title) { err.textContent = 'Título é obrigatório.'; return; }
-
+          const assignedVal = parseInt($('tf-assigned').value) || null;
           const data = {
             title,
-            description:  $('tf-desc').value.trim()       || null,
-            status:       $('tf-status').value,
-            priority:     $('tf-priority').value,
-            assigned_to:  parseInt($('tf-assigned').value) || null,
-            deadline:     $('tf-deadline').value           || null,
+            description: $('tf-desc').value.trim()  || null,
+            status:      $('tf-status').value,
+            priority:    $('tf-priority').value,
+            assigned_to: assignedVal,
+            deadline:    $('tf-deadline').value      || null,
           };
-
           await withLoading($('tf-submit'), async () => {
             try {
               const task = await TasksAPI.create(_taskState.projectId, data);
@@ -858,19 +830,93 @@ const App = (() => {
               Modal.close();
               await _fetchAndRenderBoard();
               Toast.success('Tarefa criada!');
-            } catch (e) {
-              err.textContent = apiErrorMessage(e);
-            }
+            } catch (e) { err.textContent = apiErrorMessage(e); }
           });
         });
       },
     });
   }
 
-  function _quickAddTask(status) {
-    _openNewTaskModal(status);
+  function _quickAddTask(status) { _openNewTaskModal(status); }
+
+  /* ══════════════════════════════════════════
+     VIEW: MEMBERS
+  ═══════════════════════════════════════════ */
+  async function _viewMembers() {
+    _updateNavActive();
+    _setTopbar(
+      'Membros',
+      null,
+      '<button class="btn btn-ghost btn-sm" onclick="Router.navigate(\'dashboard\')">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' +
+        ' Dashboard</button>'
+    );
+    _setContent('<div class="loading-center"><div class="spinner"></div></div>');
+
+    try {
+      const members = await OrgAPI.getMembers(state.org.id);
+      state.members = members;
+
+      const html = `
+        <div class="page">
+          <div class="page__header">
+            <div class="page__header-info">
+              <h1>Membros</h1>
+              <p>${members.length} membro${members.length !== 1 ? 's' : ''} em <strong>${escHtml(state.org?.name || '—')}</strong></p>
+            </div>
+          </div>
+          ${members.length === 0 ? `
+            <div class="empty-state">
+              <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+              </svg>
+              <div class="empty-state__title">Nenhum membro</div>
+            </div>
+          ` : `
+            <div class="card" style="padding:0;overflow:hidden;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Papel</th>
+                    <th>Entrou em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${members.map(m => `
+                    <tr>
+                      <td><span class="text-mono text-xs text-muted">#${m.id}</span>${m.id === state.user?.id ? ' <span class="badge badge-member" style="font-size:.6rem;">você</span>' : ''}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <div class="user-avatar" style="width:26px;height:26px;font-size:.65rem;flex-shrink:0;">
+                            ${escHtml(m.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase())}
+                          </div>
+                          <span style="font-size:.85rem;color:var(--text);">${escHtml(m.name)}</span>
+                        </div>
+                      </td>
+                      <td style="font-size:.8rem;">${escHtml(m.email)}</td>
+                      <td><span class="badge badge-${m.role === 'admin' ? 'admin' : 'member'}">${m.role}</span></td>
+                      <td style="font-size:.8rem;">${Render.date(m.created_at)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+      `;
+      _setContent(html);
+    } catch (e) {
+      _setContent('<div class="page"><p class="text-muted">Erro ao carregar membros: ' + apiErrorMessage(e) + '</p></div>');
+    }
   }
 
+  /* ══════════════════════════════════════════
+     EDIT ORG
+  ═══════════════════════════════════════════ */
   function _editOrg() {
     if (!state.org) return;
     Modal.open({
@@ -890,7 +936,6 @@ const App = (() => {
         const input = $('modal-org-name');
         const err   = $('modal-org-error');
         input.focus(); input.select();
-
         $('modal-org-submit').addEventListener('click', async () => {
           const name = input.value.trim();
           if (!name) { err.textContent = 'Digite um nome.'; return; }
@@ -901,28 +946,17 @@ const App = (() => {
               Modal.close();
               _viewDashboard();
               Toast.success('Organização atualizada');
-            } catch (e) {
-              err.textContent = apiErrorMessage(e);
-            }
+            } catch (e) { err.textContent = apiErrorMessage(e); }
           });
         });
       },
     });
   }
 
-  /* ── Public ── */
-  return {
-    init,
-    goTo,
-    _editOrg,
-    _quickAddTask,
-  };
+  return { init, goTo, _editOrg, _quickAddTask, _memberLabel };
 
 })();
 
-/* ── Bootstrap ── */
-document.addEventListener('DOMContentLoaded', () => {
-  App.init();
-});
+document.addEventListener('DOMContentLoaded', () => { App.init(); });
 
 window.App = App;

@@ -14,6 +14,11 @@ const OrgAPI = (() => {
     return res.data;
   }
 
+  async function getMembers(id) {
+    const res = await http.get(`/organizations/${id}/members`);
+    return res.data;
+  }
+
   async function update(id, name) {
     const res = await http.patch(`/organizations/${id}`, { name });
     return res.data;
@@ -31,3 +36,5 @@ const OrgAPI = (() => {
 
   return { create, get, update, remove, join };
 })();
+
+window.OrgAPI = OrgAPI;

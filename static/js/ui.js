@@ -206,10 +206,18 @@ const Drawer = (() => {
     if (_drawer)  { _drawer.remove();  _drawer  = null; }
   }
 
-  function open(taskData, projectId, onStatusChange) {
+  function open(taskData, projectId, onStatusChange, members) {
     _close();
 
+    members = members || [];
     const user = Auth.getUser();
+
+    // Helper local: resolve nome de membro pelo ID
+    function memberName(id) {
+      if (!id) return null;
+      const m = members.find(m => m.id === id);
+      return m ? m.name : null;
+    }
 
     // Overlay
     const overlay = document.createElement('div');
@@ -225,7 +233,7 @@ const Drawer = (() => {
     drawer.dataset.projectId = projectId;
     drawer.dataset.taskId    = taskData.id;
 
-    drawer.innerHTML = _buildDrawerHTML(taskData, projectId, user);
+    drawer.innerHTML = _buildDrawerHTML(taskData, projectId, user, memberName);
 
     document.body.appendChild(overlay);
     document.body.appendChild(drawer);
@@ -261,7 +269,7 @@ const Drawer = (() => {
     });
 
     // Load comments
-    _loadComments(drawer, projectId, taskData.id, user);
+    _loadComments(drawer, projectId, taskData.id, user, memberName);
 
     // Comment submit
     const commentInput = drawer.querySelector('[data-comment-input]');
@@ -274,7 +282,7 @@ const Drawer = (() => {
       try {
         const newComment = await CommentsAPI.create(projectId, taskData.id, content);
         commentInput.value = '';
-        _prependComment(drawer, newComment, user);
+        _prependComment(drawer, newComment, user, memberName);
       } catch (e) {
         Toast.error(apiErrorMessage(e));
       } finally {
@@ -291,7 +299,7 @@ const Drawer = (() => {
     });
   }
 
-  function _buildDrawerHTML(task, projectId, user) {
+  function _buildDrawerHTML(task, projectId, user, memberName) {
     const deadline = task.deadline
       ? Render.deadline(task.deadline)
       : '<span class="drawer-section__value empty">—</span>';
@@ -303,6 +311,14 @@ const Drawer = (() => {
     const statusPills = ['todo', 'doing', 'done'].map((s) => `
       <button class="status-pill${task.status === s ? ` active-${s}` : ''}" data-status="${s}">${s}</button>
     `).join('');
+
+    // Assignee: nome + #id ou só #id
+    const assigneeName = task.assigned_to ? (memberName ? memberName(task.assigned_to) : null) : null;
+    const assigneeHTML = task.assigned_to
+      ? `<span class="drawer-section__value">
+           ${assigneeName ? escHtml(assigneeName) + ' <span class="text-muted text-xs">#' + task.assigned_to + '</span>' : '#' + task.assigned_to}
+         </span>`
+      : '<span class="drawer-section__value">—</span>';
 
     return `
       <div class="drawer-header">
@@ -332,7 +348,7 @@ const Drawer = (() => {
           </div>
           <div>
             <div class="drawer-section__label">Atribuído a</div>
-            <span class="drawer-section__value">${task.assigned_to ? `#${task.assigned_to}` : '—'}</span>
+            ${assigneeHTML}
           </div>
           <div>
             <div class="drawer-section__label">Criado em</div>
@@ -369,7 +385,7 @@ const Drawer = (() => {
     `;
   }
 
-  async function _loadComments(drawer, projectId, taskId, user) {
+  async function _loadComments(drawer, projectId, taskId, user, memberName) {
     const list = drawer.querySelector('[data-comment-list]');
     try {
       const comments = await CommentsAPI.list(projectId, taskId);
@@ -381,18 +397,22 @@ const Drawer = (() => {
         return;
       }
       list.innerHTML = '';
-      comments.forEach((c) => _appendComment(list, c, user));
+      comments.forEach((c) => _appendComment(list, c, user, memberName));
     } catch {
       list.innerHTML = `<p class="text-muted text-sm">Erro ao carregar comentários.</p>`;
     }
   }
 
-  function _buildCommentHTML(c, user) {
+  function _buildCommentHTML(c, user, memberName) {
     const isOwn = c.user_id === user?.id;
+    const authorName = memberName ? memberName(c.user_id) : null;
+    const authorLabel = authorName
+      ? escHtml(authorName) + ' <span class="text-muted text-xs">#' + c.user_id + '</span>'
+      : '#' + c.user_id;
     return `
       <div class="comment" data-comment-id="${c.id}">
         <div class="comment-header">
-          <span class="comment-author">user#${c.user_id}</span>
+          <span class="comment-author">${authorLabel}</span>
           <div style="display:flex;align-items:center;gap:6px;">
             <span class="comment-date">${Render.relativeDate(c.created_at)}</span>
             ${isOwn ? `<button class="btn-icon" data-delete-comment="${c.id}" title="Excluir">
@@ -405,16 +425,16 @@ const Drawer = (() => {
     `;
   }
 
-  function _appendComment(list, c, user) {
-    list.insertAdjacentHTML('beforeend', _buildCommentHTML(c, user));
+  function _appendComment(list, c, user, memberName) {
+    list.insertAdjacentHTML('beforeend', _buildCommentHTML(c, user, memberName));
     _wireDeleteComment(list.lastElementChild, c, list);
   }
 
-  function _prependComment(drawer, c, user) {
+  function _prependComment(drawer, c, user, memberName) {
     const list = drawer.querySelector('[data-comment-list]');
     const empty = list.querySelector('.empty-state');
     if (empty) empty.remove();
-    list.insertAdjacentHTML('afterbegin', _buildCommentHTML(c, user));
+    list.insertAdjacentHTML('afterbegin', _buildCommentHTML(c, user, memberName));
     _wireDeleteComment(list.firstElementChild, c, list);
   }
 
