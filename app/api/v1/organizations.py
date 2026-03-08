@@ -59,6 +59,7 @@ def get_organization(path: IdPath):
     summary="Listar membros da organização",
     responses={"200": MemberResponseSchema, "403": None, "404": None}
 )
+@auth_required()
 def get_organizations_members(path: IdPath):
     try:
         if g.current_user.organization_id != path.id:

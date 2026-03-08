@@ -34,7 +34,5 @@ const OrgAPI = (() => {
     return res.data;
   }
 
-  return { create, get, update, remove, join };
+  return { create, get, getMembers, update, remove, join };
 })();
-
-window.OrgAPI = OrgAPI;

@@ -39,7 +39,7 @@ class OrganizationService:
     @staticmethod
     def get_members(id: int) -> list:
         OrganizationService.get_one(id)
-        return org_repo.get_members(organization_id=id)
+        return User.query.filter_by(organization_id=id).order_by(User.created_at).all()
 
     @staticmethod
     def update(id: int, data: dict) -> Organization:
