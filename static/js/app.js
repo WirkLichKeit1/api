@@ -279,7 +279,7 @@ const App = (() => {
 
     document.addEventListener('click', (e) => {
       const chip = document.getElementById('topbar-user-chip');
-      const menu = document.getElementById('topbar-user-menh');
+      const menu = document.getElementById('topbar-user-menu');
       if (menu && chip && !chip.contains(e.target) && !menu.contains(e.target)) {
         menu.classList.add('hidden');
       }
