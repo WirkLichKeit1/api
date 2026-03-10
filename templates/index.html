@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/views.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}" />
 
   <!-- Axios via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -270,6 +271,7 @@
         <!-- Topbar -->
         <header class="topbar">
           <div class="topbar__left">
+            <!-- hamburger inserted here by mobile.js -->
             <nav class="topbar__breadcrumb" id="topbar-breadcrumb" style="display:none;"></nav>
             <h1 class="topbar__title" id="topbar-title">—</h1>
           </div>
@@ -290,7 +292,7 @@
   </div>
   <!-- /app-root -->
 
-  <!-- SCRIPTS (ordem: api → auth → apis → ui → router → app) -->
+  <!-- SCRIPTS (ordem: api → auth → apis → ui → router → app → mobile) -->
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script src="{{ url_for('static', filename='js/organizations.js') }}"></script>
@@ -300,6 +302,7 @@
   <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
   <script src="{{ url_for('static', filename='js/router.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
 
 </body>
 </html>
