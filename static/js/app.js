@@ -312,7 +312,25 @@ const App = (() => {
   ═══════════════════════════════════════════ */
   async function _viewDashboard() {
     _updateNavActive();
-    _setTopbar('Dashboard');
+    _setTopbar(
+      'Dashboard',
+      null,
+      `<div style="display:flex;align-items:center;gap:10px;">
+        <div class="user-avatar">${(state.user?.name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</div>
+        <div>
+          <div class="user-name">${escHtml(state.user?.name || '—')}</div>
+          <div class="user-role">${escHtml(state.user?.role || 'member')}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('btn-shell-logout').click()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Sair
+        </button>
+      </div>`
+    );
     _setContent('<div class="loading-center"><div class="spinner"></div></div>');
 
     try {
