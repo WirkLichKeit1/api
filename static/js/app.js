@@ -276,6 +276,14 @@ const App = (() => {
 
     window.addEventListener('hashchange', _updateNavActive);
     _updateNavActive();
+
+    document.addEventListener('click', (e) => {
+      const chip = document.getElementById('topbar-user-chip');
+      const menu = document.getElementById('topbar-user-menh');
+      if (menu && chip && !chip.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
   }
 
   function _doLogout() {
@@ -315,20 +323,28 @@ const App = (() => {
     _setTopbar(
       'Dashboard',
       null,
-      `<div style="display:flex;align-items:center;gap:10px;">
-        <div class="user-avatar">${(state.user?.name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</div>
-        <div>
-          <div class="user-name">${escHtml(state.user?.name || '—')}</div>
-          <div class="user-role">${escHtml(state.user?.role || 'member')}</div>
+      `<div style="position:relative;">
+        <div class="user-chip" id="topbar-user-chip" style="cursor:pointer;padding:4px 8px;border-radius:var(--radius);" onclick="document.getElementById('topbar-user-menu').classList.toggle('hidden')">
+          <div class="user-avatar">${(state.user?.name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</div>
+          <div>
+            <div class="user-name">${escHtml(state.user?.name || '—')}</div>
+            <div class="user-role">${escHtml(state.user?.role || 'member')}</div>
+          </div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('btn-shell-logout').click()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Sair
-        </button>
+        <div id="topbar-user-menu" class="hidden" style="position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:8px;min-width:160px;box-shadow:var(--shadow-lg);z-index:100;">
+          <div style="padding:8px 10px;border-bottom:1px solid var(--border);margin-bottom:6px;">
+            <div style="font-size:.82rem;font-weight:500;color:var(--text);">${escHtml(state.user?.name || '—')}</div>
+            <div style="font-size:.7rem;color:var(--muted);">${escHtml(state.user?.email || '')}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm w-full" style="justify-content:flex-start;" onclick="document.getElementById('btn-shell-logout').click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sair
+          </button>
+        </div>
       </div>`
     );
     _setContent('<div class="loading-center"><div class="spinner"></div></div>');
